@@ -279,7 +279,7 @@ class _PremiumBottomNav extends StatelessWidget {
             child: Container(
               height: 64,
               decoration: BoxDecoration(
-                color: const Color(0xCC0B0E13).withOpacity(0.4),
+                color: const Color(0xCC0B0E13).withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(28),
                 border: Border.all(
                   color: Colors.white.withValues(alpha: 0.08),

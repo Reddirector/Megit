@@ -34,7 +34,7 @@ class _WhaleNavBarWrapperState extends State<WhaleNavBarWrapper> with SingleTick
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    final waveColor = accent.withOpacity(0.12);
+    final waveColor = accent.withValues(alpha: 0.12);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
@@ -93,7 +93,7 @@ class WavePainter extends CustomPainter {
     canvas.drawPath(path, paint);
 
     final paint2 = Paint()
-      ..color = color.withOpacity(0.08)
+      ..color = color.withValues(alpha: 0.08)
       ..style = PaintingStyle.fill;
 
     final path2 = Path();

@@ -158,25 +158,56 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             GlassContainer(
               borderRadius: 14,
               padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
                 children: [
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Data Saver', style: TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w600)),
-                      SizedBox(height: 2),
-                      Text('Stream at lower quality over cellular',
-                          style: TextStyle(fontSize: 11,
-                              color: AppColors.textSecondary)),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Data Saver', style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600)),
+                          SizedBox(height: 2),
+                          Text('Stream at lower quality over cellular',
+                              style: TextStyle(fontSize: 11,
+                                  color: AppColors.textSecondary)),
+                        ],
+                      ),
+                      Switch(
+                        value: settings.dataSaverMode,
+                        onChanged: (v) =>
+                            ref.read(settingsProvider.notifier).setDataSaver(v),
+                        activeThumbColor: accent,
+                      ),
                     ],
                   ),
-                  Switch(
-                    value: settings.dataSaverMode,
-                    onChanged: (v) =>
-                        ref.read(settingsProvider.notifier).setDataSaver(v),
-                    activeThumbColor: accent,
+                  const Divider(height: 24, color: AppColors.glassBorder),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Persistent Storage', style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600)),
+                          SizedBox(height: 2),
+                          Text('Keep downloads after uninstalling',
+                              style: TextStyle(fontSize: 11,
+                                  color: AppColors.textSecondary)),
+                        ],
+                      ),
+                      Switch(
+                        value: settings.persistentStorage,
+                        onChanged: (v) {
+                          ref.read(settingsProvider.notifier).setPersistentStorage(v);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Storage preference updated. Restart app to apply fully.')),
+                          );
+                        },
+                        activeThumbColor: accent,
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import '../models/song.dart';
@@ -14,6 +15,7 @@ import '../models/playlist.dart';
 class DownloadDb {
   static DownloadDb? _instance;
   static Database? _db;
+  static String? _customDbPath;
 
   DownloadDb._();
 
@@ -22,14 +24,32 @@ class DownloadDb {
     return _instance!;
   }
 
+  /// Override the database path for persistent storage across reinstalls.
+  static Future<void> setCustomPath(String? path) async {
+    if (_customDbPath != path) {
+      _customDbPath = path;
+      if (_db != null) {
+        await _db!.close();
+        _db = null;
+      }
+    }
+  }
+
   Future<Database> get database async {
     _db ??= await _initDb();
     return _db!;
   }
 
   Future<Database> _initDb() async {
-    final dbPath = await getDatabasesPath();
-    final path = p.join(dbPath, 'megit_downloads.db');
+    final String path;
+    if (_customDbPath != null) {
+      final dir = Directory(_customDbPath!);
+      if (!await dir.exists()) await dir.create(recursive: true);
+      path = p.join(_customDbPath!, 'megit_downloads.db');
+    } else {
+      final dbPath = await getDatabasesPath();
+      path = p.join(dbPath, 'megit_downloads.db');
+    }
 
     return openDatabase(
       path,
@@ -283,6 +303,23 @@ class DownloadDb {
     final db = await database;
     await db.delete('offline_playlists', where: 'id = ?', whereArgs: [playlistId]);
     await db.delete('playlist_tracks', where: 'playlistId = ?', whereArgs: [playlistId]);
+  }
+
+  /// Restore a playlist from Firestore backup.
+  Future<void> restorePlaylist(Playlist playlist) async {
+    final db = await database;
+    await db.insert(
+      'offline_playlists',
+      {
+        'id': playlist.id,
+        'name': playlist.name,
+        'createdAt': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+
+    // We don't restore tracks here because they might not be downloaded yet,
+    // but the playlist entry will exist.
   }
 
   /// Get tracks for an offline playlist.

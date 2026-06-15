@@ -1,22 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_theme.dart';
 import '../../data/models/playlist.dart';
 import '../../data/models/song.dart';
 import '../../providers/playlist_provider.dart';
 import '../../providers/audio_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../providers/import_provider.dart';
 import '../../providers/download_provider.dart';
-import '../../providers/auth_provider.dart';
 import '../../widgets/glass_container.dart';
-import '../../widgets/playing_bars.dart';
 import '../../widgets/playlist_thumbnail.dart';
 import '../../widgets/thumbnail_picker_modal.dart';
 import '../../core/utils/thumbnail_utils.dart';
@@ -31,9 +27,6 @@ class LibraryScreen extends ConsumerStatefulWidget {
 }
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
-  String _sortKey = 'recent';
-  String _sortOrder = 'desc';
-  bool _gridView = false;
   bool _showSortDropdown = false;
   bool _showAddOptions = false;
   bool _showCreateModal = false;
@@ -54,29 +47,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   List<Song> _editSongsList = [];
 
   @override
-  void initState() {
-    super.initState();
-    _loadPrefs();
-  }
-
-  Future<void> _loadPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      _gridView = prefs.getBool('megit_lib_view_mode_grid') ?? false;
-      _sortKey = prefs.getString('megit_lib_sort_key') ?? 'recent';
-      _sortOrder = prefs.getString('megit_lib_sort_order') ?? 'desc';
-    });
-  }
-
-  Future<void> _savePrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('megit_lib_view_mode_grid', _gridView);
-    await prefs.setString('megit_lib_sort_key', _sortKey);
-    await prefs.setString('megit_lib_sort_order', _sortOrder);
-  }
-
-  @override
   void dispose() {
     _createController.dispose();
     _renameController.dispose();
@@ -90,8 +60,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final playlists = playlistState.playlists;
     final accent = Theme.of(context).colorScheme.primary;
 
+    final settings = ref.watch(settingsProvider);
+    final gridView = settings.libraryGridView;
+    final sortKey = settings.librarySortKey;
+    final sortOrder = settings.librarySortOrder;
+
     // Sort
-    final sorted = _sortPlaylists(playlists);
+    final sorted = _sortPlaylists(playlists, sortKey, sortOrder);
 
     // ── Listen for Import results (Toasts) ──
     ref.listen<Map<String, ImportTask>>(importProvider, (previous, next) {
@@ -166,8 +141,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                             children: [
                               // Sort button
                               _SortButton(
-                                sortKey: _sortKey,
-                                sortOrder: _sortOrder,
+                                sortKey: sortKey,
+                                sortOrder: sortOrder,
                                 onTap: () => setState(() =>
                                     _showSortDropdown = !_showSortDropdown),
                               ),
@@ -185,13 +160,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                               // View toggle
                               GestureDetector(
                                 onTap: () {
-                                  setState(() => _gridView = !_gridView);
-                                  _savePrefs();
+                                  ref.read(settingsProvider.notifier).setLibraryGridView(!gridView);
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.all(8),
                                   child: Icon(
-                                    _gridView ? LucideIcons.list : LucideIcons.layout_grid,
+                                    gridView ? LucideIcons.list : LucideIcons.layout_grid,
                                     size: 18, color: AppColors.textSecondary,
                                   ),
                                 ),
@@ -208,7 +182,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 Expanded(
                   child: sorted.isEmpty
                       ? _buildEmptyState()
-                      : _gridView
+                      : gridView
                           ? _buildGridView(sorted)
                           : _buildListView(sorted),
                 ),
@@ -278,14 +252,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _SortOption(
-                          label: 'Recently Added', isActive: _sortKey == 'recent',
-                          sortOrder: _sortOrder,
-                          onTap: () => _handleSort('recent'),
+                          label: 'Recently Added', isActive: sortKey == 'recent',
+                          sortOrder: sortOrder,
+                          onTap: () => _handleSort('recent', sortKey, sortOrder),
                         ),
                         _SortOption(
-                          label: 'Alphabetical', isActive: _sortKey == 'alpha',
-                          sortOrder: _sortOrder,
-                          onTap: () => _handleSort('alpha'),
+                          label: 'Alphabetical', isActive: sortKey == 'alpha',
+                          sortOrder: sortOrder,
+                          onTap: () => _handleSort('alpha', sortKey, sortOrder),
                         ),
                       ],
                     ),
@@ -298,33 +272,32 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     );
   }
 
-  List<Playlist> _sortPlaylists(List<Playlist> playlists) {
+  List<Playlist> _sortPlaylists(List<Playlist> playlists, String sortKey, String sortOrder) {
     final filtered = playlists.where((pl) {
       return pl.songs.isNotEmpty;
     }).toList();
 
     filtered.sort((a, b) {
-      if (_sortKey == 'alpha') {
+      if (sortKey == 'alpha') {
         final cmp = a.name.compareTo(b.name);
-        return _sortOrder == 'desc' ? cmp : -cmp;
+        return sortOrder == 'desc' ? cmp : -cmp;
       } else {
         final timeA = a.createdAt?.millisecondsSinceEpoch ?? 0;
         final timeB = b.createdAt?.millisecondsSinceEpoch ?? 0;
         final cmp = timeB - timeA;
-        return _sortOrder == 'asc' ? cmp : -cmp;
+        return sortOrder == 'asc' ? cmp : -cmp;
       }
     });
     return filtered;
   }
 
-  void _handleSort(String key) {
-    if (_sortKey == key) {
-      setState(() => _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc');
-    } else {
-      setState(() { _sortKey = key; _sortOrder = 'desc'; });
+  void _handleSort(String key, String currentKey, String currentOrder) {
+    String nextOrder = 'desc';
+    if (currentKey == key) {
+      nextOrder = currentOrder == 'asc' ? 'desc' : 'asc';
     }
+    ref.read(settingsProvider.notifier).setLibrarySort(key, nextOrder);
     setState(() => _showSortDropdown = false);
-    _savePrefs();
   }
 
   Widget _buildEmptyState() {
@@ -1117,8 +1090,6 @@ class _PlaylistListTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final audio = ref.watch(audioProvider);
     final songs = playlist.songs;
-    final thumb = songs.isNotEmpty
-        ? ThumbnailUtils.getHighRes(songs.first.thumbnail, size: 200) : '';
 
     return Material(
       color: Colors.transparent,
@@ -1182,8 +1153,6 @@ class _PlaylistGridCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final audio = ref.watch(audioProvider);
     final songs = playlist.songs;
-    final thumb = songs.isNotEmpty
-        ? ThumbnailUtils.getHighRes(songs.first.thumbnail, size: 300) : '';
 
     return GestureDetector(
       onTap: onTap,
@@ -1236,66 +1205,44 @@ class _AddOptionItem extends StatelessWidget {
   final String label;
   final String subtitle;
   final VoidCallback? onTap;
-  final bool comingSoon;
 
   const _AddOptionItem({
     this.iconWidget, required this.label,
     required this.subtitle, this.onTap,
-    this.comingSoon = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Opacity(
-        opacity: comingSoon ? 0.5 : 1.0,
-        child: GlassContainer(
-          borderRadius: 14,
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 40, height: 40,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  color: AppColors.surface,
-                ),
-                child: Center(
-                  child: iconWidget ?? const Icon(LucideIcons.plus, size: 20),
-                ),
+      child: GlassContainer(
+        borderRadius: 14,
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                color: AppColors.surface,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label, style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600)),
-                    Text(subtitle, style: const TextStyle(
-                        fontSize: 12, color: AppColors.textSecondary)),
-                  ],
-                ),
+              child: Center(
+                child: iconWidget ?? const Icon(LucideIcons.plus, size: 20),
               ),
-              if (comingSoon)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    'Coming Soon',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w600)),
+                  Text(subtitle, style: const TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary)),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

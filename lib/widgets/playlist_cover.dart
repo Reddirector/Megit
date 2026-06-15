@@ -50,7 +50,7 @@ class PlaylistCover extends StatelessWidget {
             style: TextStyle(
               fontSize: size * 0.4,
               fontWeight: FontWeight.w900,
-              color: Colors.white.withOpacity(0.9),
+              color: Colors.white.withValues(alpha: 0.9),
             ),
           ),
         ),

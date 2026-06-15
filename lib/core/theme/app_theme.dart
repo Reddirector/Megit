@@ -115,7 +115,7 @@ class AppTheme {
 
       // ── Bottom Nav ──
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
-        backgroundColor: Colors.black.withOpacity(0.8),
+        backgroundColor: Colors.black.withValues(alpha: 0.8),
         selectedItemColor: accentColor,
         unselectedItemColor: AppColors.textTertiary,
         type: BottomNavigationBarType.fixed,
@@ -251,7 +251,7 @@ class AppTheme {
       ),
 
       splashFactory: InkRipple.splashFactory, // Smooth ripple
-      highlightColor: Colors.white.withOpacity(0.05),
+      highlightColor: Colors.white.withValues(alpha: 0.05),
     );
   }
 

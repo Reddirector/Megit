@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/thumbnail_utils.dart';
@@ -10,6 +9,7 @@ import '../../data/models/playlist.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/audio_provider.dart';
 import '../../providers/download_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../widgets/glass_container.dart';
 import '../../widgets/playing_bars.dart';
 
@@ -37,34 +37,12 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   List<Song> _editSongsList = [];
   final TextEditingController _renameController = TextEditingController();
 
-  String _sortKey = 'recent';
-  String _sortOrder = 'desc';
-  bool _gridView = false;
   bool _showSortDropdown = false;
 
   @override
   void initState() {
     super.initState();
-    _loadPrefs();
     _loadSongs();
-  }
-
-  Future<void> _loadPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (!mounted) return;
-    setState(() {
-      _gridView = prefs.getBool('megit_dl_view_mode_grid') ?? false;
-      _sortKey = prefs.getString('megit_dl_sort_key') ?? 'recent';
-      _sortOrder = prefs.getString('megit_dl_sort_order') ?? 'desc';
-    });
-    _applySorting();
-  }
-
-  Future<void> _savePrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('megit_dl_view_mode_grid', _gridView);
-    await prefs.setString('megit_dl_sort_key', _sortKey);
-    await prefs.setString('megit_dl_sort_order', _sortOrder);
   }
 
   Future<void> _loadSongs() async {
@@ -110,13 +88,17 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
       downloadsPlaylist = playlists.removeAt(dlIdx);
     }
 
-    if (_sortKey == 'alpha') {
+    final settings = ref.read(settingsProvider);
+    final sortKey = settings.downloadsSortKey;
+    final sortOrder = settings.downloadsSortOrder;
+
+    if (sortKey == 'alpha') {
       playlists.sort((a, b) {
         final cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        return _sortOrder == 'desc' ? cmp : -cmp;
+        return sortOrder == 'desc' ? cmp : -cmp;
       });
     } else {
-      if (_sortOrder == 'asc') {
+      if (sortOrder == 'asc') {
         playlists = playlists.reversed.toList();
       }
     }
@@ -129,15 +111,14 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     });
   }
 
-  void _handleSort(String key) {
-    if (_sortKey == key) {
-      setState(() => _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc');
-    } else {
-      setState(() { _sortKey = key; _sortOrder = 'desc'; });
+  void _handleSort(String key, String currentKey, String currentOrder) {
+    String nextOrder = 'desc';
+    if (currentKey == key) {
+      nextOrder = currentOrder == 'asc' ? 'desc' : 'asc';
     }
+    ref.read(settingsProvider.notifier).setDownloadsSort(key, nextOrder);
     setState(() => _showSortDropdown = false);
     _applySorting();
-    _savePrefs();
   }
 
   String _formatSize(int bytes) {
@@ -154,6 +135,11 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     final audio = ref.watch(audioProvider);
     final downloads = ref.watch(downloadProvider);
     final accent = Theme.of(context).colorScheme.primary;
+
+    final settings = ref.watch(settingsProvider);
+    final gridView = settings.downloadsGridView;
+    final sortKey = settings.downloadsSortKey;
+    final sortOrder = settings.downloadsSortOrder;
 
     return Scaffold(
       body: SafeArea(
@@ -173,23 +159,22 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                         children: [
                           // Sort button
                           _SortButton(
-                            sortKey: _sortKey,
-                            sortOrder: _sortOrder,
+                            sortKey: sortKey,
+                            sortOrder: sortOrder,
                             onTapMenu: () => setState(() =>
                                 _showSortDropdown = !_showSortDropdown),
-                            onTapToggle: () => _handleSort(_sortKey),
+                            onTapToggle: () => _handleSort(sortKey, sortKey, sortOrder),
                           ),
                           const SizedBox(width: 4),
                           // View toggle
                           GestureDetector(
                             onTap: () {
-                              setState(() => _gridView = !_gridView);
-                              _savePrefs();
+                              ref.read(settingsProvider.notifier).setDownloadsGridView(!gridView);
                             },
                             child: Container(
                               padding: const EdgeInsets.all(8),
                               child: Icon(
-                                _gridView ? LucideIcons.list : LucideIcons.layout_grid,
+                                gridView ? LucideIcons.list : LucideIcons.layout_grid,
                                 size: 18, color: AppColors.textSecondary,
                               ),
                             ),
@@ -246,7 +231,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                                 ],
                               ),
                             )
-                          : _gridView
+                          : gridView
                               ? _buildGridView(audio)
                               : _buildListView(audio),
                 ),
@@ -275,14 +260,14 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         _SortOption(
-                          label: 'Recently Added', isActive: _sortKey == 'recent',
-                          sortOrder: _sortOrder,
-                          onTap: () => _handleSort('recent'),
+                          label: 'Recently Added', isActive: sortKey == 'recent',
+                          sortOrder: sortOrder,
+                          onTap: () => _handleSort('recent', sortKey, sortOrder),
                         ),
                         _SortOption(
-                          label: 'Alphabetical', isActive: _sortKey == 'alpha',
-                          sortOrder: _sortOrder,
-                          onTap: () => _handleSort('alpha'),
+                          label: 'Alphabetical', isActive: sortKey == 'alpha',
+                          sortOrder: sortOrder,
+                          onTap: () => _handleSort('alpha', sortKey, sortOrder),
                         ),
                       ],
                     ),

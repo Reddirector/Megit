@@ -565,7 +565,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                     physics: const NeverScrollableScrollPhysics(),
                     padding: const EdgeInsets.only(top: 16, bottom: 32),
                     itemCount: queue.length,
-                    onReorder: (oldIndex, newIndex) {
+                    onReorderItem: (oldIndex, newIndex) {
                       ref.read(audioProvider.notifier).reorderQueue(oldIndex, newIndex);
                     },
                     itemBuilder: (_, i) {

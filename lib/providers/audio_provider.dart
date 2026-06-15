@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/material.dart' show SnackBar, Text, Colors, debugPrint;
+import 'package:flutter/material.dart' show SnackBar, Text;
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
@@ -98,6 +98,11 @@ class AudioNotifier extends Notifier<AudioState> {
       if (!_isInitialized) return;
       if (state.currentSong != null) {
         _handler.updateLikedState(ref.read(playlistProvider.notifier).isLiked(state.currentSong!.videoId));
+      }
+    });
+    ref.listen(authProvider, (previous, next) {
+      if (previous?.user != null && next.user == null) {
+        stop();
       }
     });
     return const AudioState();
@@ -288,7 +293,6 @@ class AudioNotifier extends Notifier<AudioState> {
   }
 
   void reorderQueue(int oldIndex, int newIndex) {
-    if (oldIndex < newIndex) newIndex -= 1;
     final list = List<Song>.from(state.queue);
     final item = list.removeAt(oldIndex);
     list.insert(newIndex, item);
@@ -328,6 +332,14 @@ class AudioNotifier extends Notifier<AudioState> {
   void seek(Duration p) {
     _crossfadeEngine.primaryPlayer.seek(p);
     state = state.copyWith(progress: p);
+  }
+
+  void stop() {
+    _loadGeneration++;
+    _crossfadeEngine.cancelCrossfade();
+    _crossfadeEngine.primaryPlayer.stop();
+    _crossfadeEngine.crossfadePlayer.stop();
+    state = const AudioState();
   }
 
   Future<void> _preloadNextSong() async {

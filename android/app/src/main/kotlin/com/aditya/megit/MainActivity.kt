@@ -1,4 +1,4 @@
-package com.ashutosh.megit
+package com.aditya.megit
 
 import com.ryanheise.audioservice.AudioServiceActivity
 

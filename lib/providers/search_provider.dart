@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../data/api/music_api.dart';
 import '../data/models/song.dart';
+import 'auth_provider.dart';
 
 /// Search state — retains query, results, suggestions, and history
 /// across tab switches (mirrors Search.jsx behavior from the PWA).
@@ -53,10 +56,10 @@ class SearchState {
 }
 
 /// Notifier that manages search query, results, suggestions, and history.
-/// Persists search history to SharedPreferences (mirrors localStorage in PWA).
-/// Caches results in memory so navigating away and back retains them.
+/// Persists search history to SharedPreferences (local cache) AND Firestore (synced).
 class SearchNotifier extends Notifier<SearchState> {
   final _musicApi = MusicApi();
+  final _db = FirebaseFirestore.instance;
   Timer? _searchTimer;
   Timer? _suggestTimer;
 
@@ -64,7 +67,7 @@ class SearchNotifier extends Notifier<SearchState> {
   final Map<String, Map<String, List<Song>>> _resultCache = {};
 
   static const _historyKey = 'megit_search_history';
-  static const _maxHistory = 10;
+  static const _maxHistory = 15;
 
   @override
   SearchState build() {
@@ -72,8 +75,20 @@ class SearchNotifier extends Notifier<SearchState> {
       _searchTimer?.cancel();
       _suggestTimer?.cancel();
     });
-    // Load history asynchronously
+
+    // 1. Load history from local cache immediately
     _loadHistory();
+
+    // 2. Listen to auth changes to sync from Firestore
+    ref.listen(authProvider, (previous, next) {
+      if (next.user != null && previous?.user?.uid != next.user!.uid) {
+        _syncFromFirestore(next.user!.uid);
+      } else if (next.user == null) {
+        // Reset history on logout
+        state = state.copyWith(history: const []);
+      }
+    });
+
     return const SearchState();
   }
 
@@ -90,12 +105,43 @@ class SearchNotifier extends Notifier<SearchState> {
     } catch (_) {}
   }
 
+  Future<void> _syncFromFirestore(String uid) async {
+    try {
+      final doc = await _db.collection('users').doc(uid).collection('settings').doc('searchHistory').get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        final list = (data['history'] as List<dynamic>?)
+                ?.map((e) => Song.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [];
+        state = state.copyWith(history: list);
+        _saveHistory(); // Update local cache
+      }
+    } catch (e) {
+      debugPrint('[Search] Firestore sync error: $e');
+    }
+  }
+
   Future<void> _saveHistory() async {
+    // 1. Save to local disk
     try {
       final prefs = await SharedPreferences.getInstance();
       final json = jsonEncode(state.history.map((s) => s.toJson()).toList());
       await prefs.setString(_historyKey, json);
     } catch (_) {}
+
+    // 2. Save to Firestore if logged in
+    final user = ref.read(authProvider).user;
+    if (user != null) {
+      try {
+        await _db.collection('users').doc(user.uid).collection('settings').doc('searchHistory').set({
+          'history': state.history.map((s) => s.toJson()).toList(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        debugPrint('[Search] Firestore save error: $e');
+      }
+    }
   }
 
   /// Called when user types in the search field.

@@ -285,6 +285,7 @@ class AuthNotifier extends Notifier<AuthState> {
 
   // ── Logout ──
   Future<void> logout() async {
+    // 1. Sign out from Firebase & Google
     await _googleSignIn.signOut();
     await _auth.signOut();
   }

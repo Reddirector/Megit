@@ -6,7 +6,6 @@ import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/utils/thumbnail_utils.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/audio_provider.dart';
@@ -174,7 +173,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         gradient: LinearGradient(colors: [accent, secondary]),
                         boxShadow: [
                           BoxShadow(
-                              color: accent.withOpacity(0.4),
+                              color: accent.withValues(alpha: 0.4),
                               blurRadius: 24, spreadRadius: -4),
                         ],
                       ),
@@ -261,7 +260,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       icon: const Icon(LucideIcons.log_out, size: 14),
                       label: const Text('Logout'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.danger.withOpacity(0.15),
+                        backgroundColor: AppColors.danger.withValues(alpha: 0.15),
                         foregroundColor: AppColors.danger,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
@@ -294,7 +293,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(8),
-                            color: isActive ? accent.withOpacity(0.25) : Colors.transparent,
+                            color: isActive ? accent.withValues(alpha: 0.25) : Colors.transparent,
                           ),
                           child: Center(
                             child: Text(label,
@@ -476,7 +475,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         borderRadius: BorderRadius.circular(18),
                         gradient: LinearGradient(colors: [accent, secondary]),
                         boxShadow: [
-                          BoxShadow(color: accent.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 8)),
+                          BoxShadow(color: accent.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 8)),
                         ],
                       ),
                       child: const Icon(LucideIcons.audio_waveform, size: 30, color: Colors.white),

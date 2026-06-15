@@ -131,9 +131,9 @@ class _ArtistScreenState extends ConsumerState<ArtistScreen> {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              Colors.black.withOpacity(0.2),
+                              Colors.black.withValues(alpha: 0.2),
                               Colors.transparent,
-                              Colors.black.withOpacity(0.7),
+                              Colors.black.withValues(alpha: 0.7),
                               AppColors.background,
                             ],
                             stops: const [0.0, 0.4, 0.8, 1.0],
@@ -527,7 +527,7 @@ class _OutlinedActionButton extends StatelessWidget {
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: Border.all(color: isActive ? accent : AppColors.glassBorder, width: 1.5),
-          color: isActive ? accent.withOpacity(0.1) : Colors.transparent,
+          color: isActive ? accent.withValues(alpha: 0.1) : Colors.transparent,
         ),
         child: Icon(icon, size: 20, color: isActive ? accent : Colors.white),
       ),

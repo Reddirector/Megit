@@ -12,7 +12,7 @@ import 'providers/audio_provider.dart';
 import 'services/audio_handler.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-/// Global key for showing snackbars from anywhere (e.g. Providers)
+/// Global key for showing snack bars from anywhere (e.g. Providers)
 final scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
 void main() async {
@@ -100,7 +100,7 @@ class _MegitAppState extends ConsumerState<MegitApp> {
     final accentColor = settings.accentColor;
 
     // Trigger initial settings load from disk on auth
-    ref.listen(authProvider, (prev, next) {
+    ref.listen(authProvider, (_, __) {
       // Nothing needed here — settings load from disk automatically on startup.
     });
 

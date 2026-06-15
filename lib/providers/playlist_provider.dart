@@ -6,7 +6,6 @@ import '../data/models/song.dart';
 import '../data/models/playlist.dart';
 import 'auth_provider.dart';
 import '../data/local/download_db.dart';
-import 'download_provider.dart';
 
 class PlaylistState {
   final List<Playlist> playlists;
@@ -52,6 +51,10 @@ class PlaylistNotifier extends Notifier<PlaylistState> {
       state = const PlaylistState(playlists: [], loading: false);
       return;
     }
+    
+    // Restore offline playlists from cloud on login
+    restoreOfflinePlaylists();
+
     final query = _db.collection('playlists').where('members', arrayContains: userId);
     _firestoreSub = query.snapshots().listen((snapshot) {
       final playlists = snapshot.docs.map((doc) {
@@ -123,6 +126,16 @@ class PlaylistNotifier extends Notifier<PlaylistState> {
 
   Future<void> updatePlaylist(String playlistId, Map<String, dynamic> updates) async {
     try {
+      if (playlistId.startsWith('__pl__')) {
+         // This is an offline playlist backup
+         final auth = ref.read(authProvider);
+         if (auth.user == null) return;
+         await _db.collection('users').doc(auth.user!.uid).collection('offlinePlaylists').doc(playlistId).set({
+           ...updates,
+           'lastUpdated': FieldValue.serverTimestamp(),
+         }, SetOptions(merge: true));
+         return;
+      }
       await _db.collection('playlists').doc(playlistId).update({
         ...updates,
         'lastUpdated': FieldValue.serverTimestamp(),
@@ -130,10 +143,48 @@ class PlaylistNotifier extends Notifier<PlaylistState> {
     } catch (e) { debugPrint('[Playlist] Update error: $e'); }
   }
 
+  Future<void> syncOfflinePlaylist(Playlist playlist) async {
+    final auth = ref.read(authProvider);
+    if (auth.user == null) return;
+    try {
+      await _db.collection('users').doc(auth.user!.uid).collection('offlinePlaylists').doc(playlist.id).set({
+        'name': playlist.name,
+        'songs': playlist.songs.map((s) => s.toJson()).toList(),
+        'lastUpdated': FieldValue.serverTimestamp(),
+        'type': 'OFFLINE_PLAYLIST',
+      });
+    } catch (e) {
+      debugPrint('[Playlist] Sync offline error: $e');
+    }
+  }
+
+  Future<void> restoreOfflinePlaylists() async {
+    final auth = ref.read(authProvider);
+    if (auth.user == null) return;
+    try {
+      final snap = await _db.collection('users').doc(auth.user!.uid).collection('offlinePlaylists').get();
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final playlist = Playlist.fromJson({...data, 'id': doc.id});
+        await DownloadDb.instance.restorePlaylist(playlist);
+      }
+    } catch (e) {
+      debugPrint('[Playlist] Restore offline error: $e');
+    }
+  }
+
   Future<void> deletePlaylist(String playlistId) async {
     try {
-      await DownloadDb.instance.deleteOfflinePlaylist('__pl__$playlistId');
-      _db.collection('playlists').doc(playlistId).delete();
+      if (playlistId.startsWith('__pl__')) {
+        final auth = ref.read(authProvider);
+        if (auth.user != null) {
+          await _db.collection('users').doc(auth.user!.uid).collection('offlinePlaylists').doc(playlistId).delete();
+        }
+      }
+      await DownloadDb.instance.deleteOfflinePlaylist(playlistId);
+      if (!playlistId.startsWith('__pl__')) {
+        _db.collection('playlists').doc(playlistId).delete();
+      }
     } catch (e) { debugPrint('[Playlist] Delete error: $e'); }
   }
 
