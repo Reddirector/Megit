@@ -168,6 +168,8 @@ class PlaylistNotifier extends Notifier<PlaylistState> {
         final playlist = Playlist.fromJson({...data, 'id': doc.id});
         await DownloadDb.instance.restorePlaylist(playlist);
       }
+      // Refresh playlist state if we are on the Library/Offline screen
+      _subscribe(auth.user!.uid);
     } catch (e) {
       debugPrint('[Playlist] Restore offline error: $e');
     }

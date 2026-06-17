@@ -23,19 +23,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyCUDMSkKB-_hL9bl45P5BxVEVXDrS7C4_8',
-    appId: '1:360258546308:android:5d34ef95c27d79e80af0d1',
-    messagingSenderId: '360258546308',
-    projectId: 'megit-by-ap',
-    storageBucket: 'megit-by-ap.firebasestorage.app',
+    apiKey: 'AIzaSyCm2oL-yNcvlOJhfpPEgYZE2o5rxncc4kk',
+    appId: '1:290283449789:android:81cb075a5de663ec2db6d4',
+    messagingSenderId: '290283449789',
+    projectId: 'megit-2e583',
+    storageBucket: 'megit-2e583.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCUDMSkKB-_hL9bl45P5BxVEVXDrS7C4_8',
-    appId: '1:360258546308:ios:5d34ef95c27d79e80af0d1', // Placeholder based on Android, might need correction if iOS is used
-    messagingSenderId: '360258546308',
-    projectId: 'megit-by-ap',
-    storageBucket: 'megit-by-ap.firebasestorage.app',
+    apiKey: 'AIzaSyCm2oL-yNcvlOJhfpPEgYZE2o5rxncc4kk',
+    appId: '1:290283449789:ios:5d34ef95c27d79e80af0d1', // Placeholder
+    messagingSenderId: '290283449789',
+    projectId: 'megit-2e583',
+    storageBucket: 'megit-2e583.firebasestorage.app',
     iosBundleId: 'com.aditya.megit',
   );
 }

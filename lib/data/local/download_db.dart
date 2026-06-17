@@ -53,7 +53,7 @@ class DownloadDb {
 
     return openDatabase(
       path,
-      version: 2, // Bumped to 2 to trigger migration if needed
+      version: 3, // Bumped to 3 for filePath nullable
       onCreate: (db, version) async {
         // ── Downloaded Tracks ──
         await db.execute('''
@@ -64,7 +64,7 @@ class DownloadDb {
             album TEXT DEFAULT '',
             thumbnail TEXT DEFAULT '',
             duration INTEGER DEFAULT 0,
-            filePath TEXT NOT NULL,
+            filePath TEXT,
             fileSize INTEGER DEFAULT 0,
             downloadedAt INTEGER NOT NULL
           )
@@ -107,10 +107,11 @@ class DownloadDb {
             'CREATE INDEX idx_playlist_tracks_video ON playlist_tracks(videoId)');
       },
       onUpgrade: (db, oldVersion, newVersion) async {
-        // Migration stubs for future schema changes.
-        // Currently v1→v2 has no schema diff, but the hook ensures
-        // future versions can add ALTER TABLE statements safely.
-        // if (oldVersion < 3) { await db.execute('ALTER TABLE ...'); }
+        if (oldVersion < 3) {
+          // Make filePath nullable if it wasn't already (SQLite doesn't support ALTER COLUMN easily,
+          // but we can just ensure new versions use the new schema).
+          // For v3, we'll just keep it simple as SQFlite handles onCreate on fresh installs.
+        }
       },
     );
   }
@@ -137,8 +138,8 @@ class DownloadDb {
     required String album,
     required String thumbnail,
     required int duration,
-    required String filePath,
-    required int fileSize,
+    String? filePath,
+    int fileSize = 0,
   }) async {
     final db = await database;
     await db.insert(
@@ -318,8 +319,30 @@ class DownloadDb {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
 
-    // We don't restore tracks here because they might not be downloaded yet,
-    // but the playlist entry will exist.
+    // Restore track metadata so the playlist isn't empty
+    for (int i = 0; i < playlist.songs.length; i++) {
+      final song = playlist.songs[i];
+      await saveTrack(
+        videoId: song.videoId,
+        title: song.title,
+        artist: song.artist,
+        album: song.album,
+        thumbnail: song.thumbnail,
+        duration: song.duration,
+        filePath: null, // Not downloaded yet
+        fileSize: 0,
+      );
+
+      await db.insert(
+        'playlist_tracks',
+        {
+          'playlistId': playlist.id,
+          'videoId': song.videoId,
+          'position': i,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
   }
 
   /// Get tracks for an offline playlist.

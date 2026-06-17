@@ -1,45 +1,51 @@
 {
   "project_info": {
-    "project_number": "360258546308",
-    "project_id": "megit-by-ap",
-    "storage_bucket": "megit-by-ap.firebasestorage.app"
+    "project_number": "290283449789",
+    "project_id": "megit-2e583",
+    "storage_bucket": "megit-2e583.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:360258546308:android:5d34ef95c27d79e80af0d1",
+        "mobilesdk_app_id": "1:290283449789:android:81cb075a5de663ec2db6d4",
         "android_client_info": {
           "package_name": "com.aditya.megit"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "290283449789-el2o921aq4uk7mntnv3t51feekptmks4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aditya.megit",
+            "certificate_hash": "d0dcf32a1ef9afb64f447477c07fd38de2f33ef7"
+          }
+        },
+        {
+          "client_id": "290283449789-jp4hog1ghgkedj7c80vcujeo78igm48p.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyCUDMSkKB-_hL9bl45P5BxVEVXDrS7C4_8"
+          "current_key": "AIzaSyCm2oL-yNcvlOJhfpPEgYZE2o5rxncc4kk"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:360258546308:android:e3165370da4c53000af0d1",
-        "android_client_info": {
-          "package_name": "com.megit.megit"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyCUDMSkKB-_hL9bl45P5BxVEVXDrS7C4_8"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "290283449789-jp4hog1ghgkedj7c80vcujeo78igm48p.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "290283449789-vick0u9c22r35hjc5b1p70nvlgbtp03b.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.aditya.megit"
+              }
+            }
+          ]
         }
       }
     }

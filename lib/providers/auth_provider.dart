@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../services/google_auth_service.dart';
 
 // ── Auth State ──────────────────────────────────────────────────────────────
 
@@ -58,9 +59,6 @@ class AuthNotifier extends Notifier<AuthState> {
   StreamSubscription<User?>? _authSub;
   final _auth = FirebaseAuth.instance;
   final _db = FirebaseFirestore.instance;
-  final _googleSignIn = GoogleSignIn(
-    scopes: ['https://www.googleapis.com/auth/youtube.readonly'],
-  );
 
   @override
   AuthState build() {
@@ -124,7 +122,7 @@ class AuthNotifier extends Notifier<AuthState> {
 
   // ── Google Sign-In ──
   Future<void> loginWithGoogle() async {
-    final googleUser = await _googleSignIn.signIn();
+    final googleUser = await GoogleAuthService.signIn();
     if (googleUser == null) return; // User cancelled
 
     final googleAuth = await googleUser.authentication;
@@ -286,7 +284,7 @@ class AuthNotifier extends Notifier<AuthState> {
   // ── Logout ──
   Future<void> logout() async {
     // 1. Sign out from Firebase & Google
-    await _googleSignIn.signOut();
+    await GoogleAuthService.signOut();
     await _auth.signOut();
   }
 }
