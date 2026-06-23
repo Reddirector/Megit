@@ -16,6 +16,7 @@ class SettingsState {
   final bool dataSaverMode;
   final Color accentColor;
   final bool persistentStorage;
+  final bool autoplayEnabled;
   
   // Library view preferences
   final LayoutMode libraryLayoutMode;
@@ -37,6 +38,7 @@ class SettingsState {
     this.dataSaverMode = false,
     this.accentColor = const Color(0xFF9D4EDD),
     this.persistentStorage = false,
+    this.autoplayEnabled = true,
     this.libraryLayoutMode = LayoutMode.masonry,
     this.librarySortKey = 'recent',
     this.librarySortOrder = 'desc',
@@ -53,6 +55,7 @@ class SettingsState {
     bool? dataSaverMode,
     Color? accentColor,
     bool? persistentStorage,
+    bool? autoplayEnabled,
     LayoutMode? libraryLayoutMode,
     String? librarySortKey,
     String? librarySortOrder,
@@ -68,6 +71,7 @@ class SettingsState {
       dataSaverMode: dataSaverMode ?? this.dataSaverMode,
       accentColor: accentColor ?? this.accentColor,
       persistentStorage: persistentStorage ?? this.persistentStorage,
+      autoplayEnabled: autoplayEnabled ?? this.autoplayEnabled,
       libraryLayoutMode: libraryLayoutMode ?? this.libraryLayoutMode,
       librarySortKey: librarySortKey ?? this.librarySortKey,
       librarySortOrder: librarySortOrder ?? this.librarySortOrder,
@@ -85,6 +89,7 @@ class SettingsState {
         'dataSaverMode': dataSaverMode,
         'accentColor': accentColor.toARGB32(),
         'persistentStorage': persistentStorage,
+        'autoplayEnabled': autoplayEnabled,
         'libraryLayoutMode': libraryLayoutMode.index,
         'librarySortKey': librarySortKey,
         'librarySortOrder': librarySortOrder,
@@ -101,6 +106,7 @@ class SettingsState {
         dataSaverMode: json['dataSaverMode'] ?? false,
         accentColor: Color(json['accentColor'] ?? 0xFF9D4EDD),
         persistentStorage: json['persistentStorage'] ?? false,
+        autoplayEnabled: json['autoplayEnabled'] ?? true,
         libraryLayoutMode: LayoutMode.values[(json['libraryLayoutMode'] ?? 2).clamp(0, 2)],
         librarySortKey: json['librarySortKey'] ?? 'recent',
         librarySortOrder: json['librarySortOrder'] ?? 'desc',
@@ -142,6 +148,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
       dataSaverMode: prefs.getBool('megit_data_saver') ?? false,
       accentColor: Color(prefs.getInt('megit_accent_color_int') ?? 0xFF9D4EDD),
       persistentStorage: prefs.getBool('megit_persistent_storage') ?? false,
+      autoplayEnabled: prefs.getBool('megit_autoplay_enabled') ?? true,
       libraryLayoutMode: LayoutMode.values[(prefs.getInt('megit_lib_layout_mode') ?? 2).clamp(0, 2)],
       librarySortKey: prefs.getString('megit_lib_sort_key') ?? 'recent',
       librarySortOrder: prefs.getString('megit_lib_sort_order') ?? 'desc',
@@ -172,6 +179,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
   void setDataSaver(bool e) { state = state.copyWith(dataSaverMode: e); _save(); }
   void setAccentColor(Color c) { state = state.copyWith(accentColor: c); _save(); }
   void setPersistentStorage(bool e) { state = state.copyWith(persistentStorage: e); _save(); }
+  void setAutoplayEnabled(bool e) { state = state.copyWith(autoplayEnabled: e); _save(); }
   void setLibraryLayoutMode(LayoutMode m) { state = state.copyWith(libraryLayoutMode: m); _save(); }
   void setLibrarySort(String k, String o) { state = state.copyWith(librarySortKey: k, librarySortOrder: o); _save(); }
   void setDownloadsLayoutMode(LayoutMode m) { state = state.copyWith(downloadsLayoutMode: m); _save(); }
@@ -197,6 +205,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
     await prefs.setInt('megit_crossfade', state.crossfadeDuration);
     await prefs.setBool('megit_data_saver', state.dataSaverMode);
     await prefs.setBool('megit_persistent_storage', state.persistentStorage);
+    await prefs.setBool('megit_autoplay_enabled', state.autoplayEnabled);
     await prefs.setInt('megit_accent_color_int', state.accentColor.toARGB32());
     await prefs.setInt('megit_lib_layout_mode', state.libraryLayoutMode.index);
     await prefs.setString('megit_lib_sort_key', state.librarySortKey);

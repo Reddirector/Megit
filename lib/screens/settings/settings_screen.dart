@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart' show CupertinoSwitch;
+import 'dart:io' show Platform;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import '../../core/theme/app_colors.dart';
@@ -145,6 +147,34 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           ref.read(settingsProvider.notifier)
                               .setCrossfade(v.toInt()),
                     ),
+                  ),
+                  const Divider(height: 24, color: AppColors.glassBorder),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Autoplay', style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600)),
+                          SizedBox(height: 2),
+                          Text('Fetch recommendations when queue ends',
+                              style: TextStyle(fontSize: 11,
+                                  color: AppColors.textSecondary)),
+                        ],
+                      ),
+                      Platform.isIOS
+                          ? CupertinoSwitch(
+                              value: settings.autoplayEnabled,
+                              onChanged: (v) => ref.read(settingsProvider.notifier).setAutoplayEnabled(v),
+                              activeColor: accent,
+                            )
+                          : Switch(
+                              value: settings.autoplayEnabled,
+                              onChanged: (v) => ref.read(settingsProvider.notifier).setAutoplayEnabled(v),
+                              activeThumbColor: accent,
+                            ),
+                    ],
                   ),
                 ],
               ),

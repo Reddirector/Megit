@@ -1,6 +1,8 @@
 import 'dart:ui';
 import 'dart:math' as math;
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart' show CupertinoSwitch;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +16,7 @@ import '../../providers/audio_provider.dart' hide RepeatMode;
 import '../../providers/audio_provider.dart' as ap show RepeatMode;
 import '../../providers/playlist_provider.dart';
 import '../../providers/download_provider.dart';
+import '../../providers/settings_provider.dart';
 import '../../widgets/glass_container.dart';
 import '../../widgets/song_action_sheet.dart';
 import '../../widgets/song_tile.dart';
@@ -40,9 +43,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   final Map<int, GlobalKey> _lyricKeys = {};
   int _lastAutoScrolledIndex = -1;
 
+  GlobalKey? _nowPlayingKey;
+  bool _hasScrolledToNowPlaying = false;
+
   @override
   void initState() {
     super.initState();
+    _nowPlayingKey = GlobalKey();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final song = ref.read(audioProvider).currentSong;
       if (song != null) {
@@ -76,6 +83,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     ref.listen(audioProvider, (prev, next) {
       if (next.currentSong != null && next.currentSong?.videoId != prev?.currentSong?.videoId) {
         _fetchLyricsIfNeeded(next.currentSong!);
+        setState(() {
+          _hasScrolledToNowPlaying = false;
+          _nowPlayingKey = GlobalKey();
+        });
       }
     });
 
@@ -308,7 +319,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                             GestureDetector(
                               onTap: () => ref.read(audioProvider.notifier).togglePlay(),
                               child: Container(
-                                width: 72, height: 72,
+                                width: 64, height: 64,
                                 decoration: const BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: Colors.white,
@@ -316,14 +327,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                 child: Center(
                                   child: audioData.isLoading
                                       ? SizedBox(
-                                          width: 28, height: 28,
+                                          width: 24, height: 24,
                                           child: CircularProgressIndicator(
                                               strokeWidth: 3, color: accent))
                                       : Icon(
                                           audioData.isPlaying
                                               ? Icons.pause
                                               : Icons.play_arrow,
-                                          size: 44, color: Colors.black),
+                                          size: 40, color: Colors.black),
                                 ),
                               ),
                             ),
@@ -523,6 +534,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   // ── Up Next ──
   Widget _buildUpNext(List<Song> queue, Color accent, ScrollController scrollController) {
+    final audio = ref.watch(audioProvider);
+    final history = audio.history;
+    final current = audio.currentSong;
+    final autoplay = ref.watch(settingsProvider.select((s) => s.autoplayEnabled));
+
+    // Auto-scroll to now playing when sheet is expanded
+    if (_sheetExtent > 0.3 && !_hasScrolledToNowPlaying) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_nowPlayingKey?.currentContext != null) {
+          _hasScrolledToNowPlaying = true;
+          Scrollable.ensureVisible(
+            _nowPlayingKey!.currentContext!,
+            alignment: 0.1,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
+
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
@@ -551,85 +582,161 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Center(
-                  child: Text('Up Next',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: accent)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: [
+                      const Expanded(child: SizedBox()),
+                      Text('Up Next',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: accent)),
+                      Expanded(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            const Text('Autoplay', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                            const SizedBox(width: 4),
+                            Transform.scale(
+                              scale: 0.7,
+                              child: SizedBox(
+                                height: 24,
+                                width: Platform.isIOS ? 45 : 36,
+                                child: Platform.isIOS
+                                    ? CupertinoSwitch(
+                                        value: autoplay,
+                                        onChanged: (v) => ref.read(settingsProvider.notifier).setAutoplayEnabled(v),
+                                        activeColor: accent,
+                                      )
+                                    : Switch(
+                                        value: autoplay,
+                                        onChanged: (v) => ref.read(settingsProvider.notifier).setAutoplayEnabled(v),
+                                        activeColor: accent,
+                                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
-          SliverToBoxAdapter(
-            child: Opacity(
-              opacity: ((_sheetExtent - 0.11) / 0.12).clamp(0.0, 1.0),
-              child: queue.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.only(top: 32),
-                    child: Center(
-                      child: Text('No tracks in queue',
-                          style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+          
+          // ── History ──
+          if (history.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Text('PREVIOUSLY PLAYED',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.textTertiary, letterSpacing: 1.5)),
+              ),
+            ),
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, i) {
+                  final s = history[i];
+                  return Opacity(
+                    opacity: 0.6,
+                    child: SongTile(
+                      song: s,
+                      onTap: () => ref.read(audioProvider.notifier).jumpToHistory(i),
                     ),
-                  )
-                : ReorderableListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.only(top: 16, bottom: 32),
-                    itemCount: queue.length,
-                    onReorderItem: (oldIndex, newIndex) {
-                      ref.read(audioProvider.notifier).reorderQueue(oldIndex, newIndex);
-                    },
-                    itemBuilder: (_, i) {
-                      final s = queue[i];
-                      return Dismissible(
-                        key: ValueKey('${s.id}_$i'),
-                        direction: DismissDirection.horizontal,
-                        onDismissed: (_) {
-                          ref.read(audioProvider.notifier).removeFromQueue(i);
-                        },
-                        background: ClipRect(
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
-                            child: Container(
-                              color: Colors.red.withValues(alpha: 0.1),
-                              alignment: Alignment.centerLeft,
-                              padding: const EdgeInsets.symmetric(horizontal: 20),
-                              child: const Icon(LucideIcons.trash_2, color: Colors.white),
-                            ),
-                          ),
-                        ),
-                        secondaryBackground: ClipRect(
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 15.0, sigmaY: 15.0),
-                            child: Container(
-                              color: Colors.red.withValues(alpha: 0.1),
-                              alignment: Alignment.centerRight,
-                              padding: const EdgeInsets.symmetric(horizontal: 20),
-                              child: const Icon(LucideIcons.trash_2, color: Colors.white),
-                            ),
-                          ),
-                        ),
-                        child: SongTile(
-                          song: s,
-                          onTap: () => ref.read(audioProvider.notifier).playFromQueue(i),
-                          onLongPress: () => showModalBottomSheet(
-                            context: context,
-                            backgroundColor: Colors.transparent,
-                            isScrollControlled: true,
-                            builder: (_) => SongActionSheet(song: s),
-                          ),
-                          trailing: ReorderableDragStartListener(
-                            index: i,
-                            child: const Padding(
-                              padding: EdgeInsets.all(8),
-                              child: Icon(LucideIcons.equal,
-                                  size: 20, color: AppColors.textSecondary),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  );
+                },
+                childCount: history.length,
+              ),
+            ),
+          ],
+
+          // ── Now Playing ──
+          if (current != null) ...[
+            SliverToBoxAdapter(
+              key: _nowPlayingKey,
+              child: Container(
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.1),
+                  border: Border.symmetric(horizontal: BorderSide(color: accent.withValues(alpha: 0.2))),
+                ),
+                child: SongTile(
+                  song: current,
+                  isPlaying: true,
+                  onTap: () {}, // No-op for current
+                ),
+              ),
+            ),
+          ],
+
+          // ── Up Next ──
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text('UP NEXT',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.textTertiary, letterSpacing: 1.5)),
             ),
           ),
+          
+          if (queue.isEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                  child: Text(autoplay ? 'Loading recommendations...' : 'End of queue',
+                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                ),
+              ),
+            )
+          else
+            SliverReorderableList(
+              itemCount: queue.length,
+              onReorder: (oldIndex, newIndex) {
+                ref.read(audioProvider.notifier).reorderQueue(oldIndex, newIndex);
+              },
+              itemBuilder: (context, i) {
+                final s = queue[i];
+                return ReorderableDelayedDragStartListener(
+                  key: ValueKey('${s.id}_$i'),
+                  index: i,
+                  child: Dismissible(
+                    key: ValueKey('dismiss_${s.id}_$i'),
+                    direction: DismissDirection.horizontal,
+                    onDismissed: (_) {
+                      ref.read(audioProvider.notifier).removeFromQueue(i);
+                    },
+                    background: Container(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: const Icon(LucideIcons.trash_2, color: Colors.white),
+                    ),
+                    secondaryBackground: Container(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: const Icon(LucideIcons.trash_2, color: Colors.white),
+                    ),
+                    child: SongTile(
+                      song: s,
+                      onTap: () => ref.read(audioProvider.notifier).playFromQueue(i),
+                      onLongPress: () => showModalBottomSheet(
+                        context: context,
+                        backgroundColor: Colors.transparent,
+                        isScrollControlled: true,
+                        builder: (_) => SongActionSheet(song: s),
+                      ),
+                      trailing: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(LucideIcons.equal,
+                            size: 20, color: AppColors.textSecondary),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          const SliverToBoxAdapter(child: SizedBox(height: 40)),
         ],
       ),
     );

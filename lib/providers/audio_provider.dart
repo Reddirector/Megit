@@ -97,6 +97,10 @@ class AudioNotifier extends Notifier<AudioState> {
   int _consecutiveFailures = 0;
   bool _isInitialized = false;
 
+  int _autoFetchCount = 0;
+  static const int _maxAutoFetchBatches = 15;
+  DateTime _lastAutoFetchTime = DateTime.fromMillisecondsSinceEpoch(0);
+
   @override
   AudioState build() {
     ref.onDispose(_dispose);
@@ -232,6 +236,7 @@ class AudioNotifier extends Notifier<AudioState> {
     final myGen = ++_loadGeneration;
     _crossfadeEngine.cancelCrossfade();
     _statsThresholdReached = false;
+    if (clearQueue) _autoFetchCount = 0;
     
     state = state.copyWith(
       isLoading: true, 
@@ -244,6 +249,7 @@ class AudioNotifier extends Notifier<AudioState> {
       duration: normalized.duration > 0 ? Duration(seconds: normalized.duration) : Duration.zero,
       queue: clearQueue ? [] : state.queue,
       baseQueue: clearQueue ? [] : state.baseQueue,
+      history: clearQueue ? [] : state.history,
       contextPlaylistId: contextPlaylistId,
       clearContextPlaylistId: normalized.playlistId == '__suggested__' || (clearQueue && contextPlaylistId == null),
     );
@@ -258,15 +264,12 @@ class AudioNotifier extends Notifier<AudioState> {
       _updateMediaItem(normalized);
       _handler.updateLikedState(ref.read(playlistProvider.notifier).isLiked(normalized.videoId));
 
-      if (state.queue.length <= 10) {
+      if (state.queue.length <= 10 && ref.read(settingsProvider).autoplayEnabled) {
         final seedId = state.queue.isEmpty ? normalized.videoId : state.queue.last.videoId;
         _fetchWatchNext(seedId);
       }
       
-      if (state.currentSong != null && state.currentSong!.videoId != normalized.videoId) {
-        final hist = [state.currentSong!, ...state.history];
-        state = state.copyWith(history: hist.length > 50 ? hist.sublist(0, 50) : hist);
-      }
+      // Removed history prepending from here — now handled by navigation methods
     });
   }
 
@@ -348,13 +351,21 @@ class AudioNotifier extends Notifier<AudioState> {
     _statsThresholdReached = false;
     if (state.queue.isNotEmpty) {
       final next = state.queue.first;
-      state = state.copyWith(queue: state.queue.sublist(1));
+      final newHistory = state.currentSong != null ? [...state.history, state.currentSong!] : state.history;
+      state = state.copyWith(
+        queue: state.queue.sublist(1),
+        history: newHistory.length > 100 ? newHistory.sublist(newHistory.length - 100) : newHistory,
+      );
       playSong(next);
     } else if (state.repeatMode == RepeatMode.all && state.baseQueue.isNotEmpty) {
       final rebuilt = state.isShuffled ? ([...state.baseQueue]..shuffle()) : [...state.baseQueue];
-      state = state.copyWith(queue: rebuilt.sublist(1));
+      final newHistory = state.currentSong != null ? [...state.history, state.currentSong!] : state.history;
+      state = state.copyWith(
+        queue: rebuilt.sublist(1),
+        history: newHistory.length > 100 ? newHistory.sublist(newHistory.length - 100) : newHistory,
+      );
       playSong(rebuilt.first);
-    } else if (state.currentSong != null) {
+    } else if (state.currentSong != null && ref.read(settingsProvider).autoplayEnabled) {
       // Transition to loading state so notification stays active while fetching next batch
       state = state.copyWith(isLoading: true);
       _fetchWatchNextAndPlayFirst(state.currentSong!.videoId);
@@ -369,8 +380,12 @@ class AudioNotifier extends Notifier<AudioState> {
       _crossfadeEngine.primaryPlayer.seek(Duration.zero);
       state = state.copyWith(progress: Duration.zero);
     } else if (state.history.isNotEmpty) {
-      final prev = state.history.first;
-      state = state.copyWith(queue: state.currentSong != null ? [state.currentSong!, ...state.queue] : state.queue, history: state.history.sublist(1));
+      final prev = state.history.last;
+      final newQueue = state.currentSong != null ? [state.currentSong!, ...state.queue] : state.queue;
+      state = state.copyWith(
+        queue: newQueue,
+        history: state.history.sublist(0, state.history.length - 1),
+      );
       playSong(prev);
     } else {
       _crossfadeEngine.primaryPlayer.seek(Duration.zero);
@@ -380,14 +395,39 @@ class AudioNotifier extends Notifier<AudioState> {
 
   void addToQueue(Song s) {
     final n = s.copyWith(id: s.videoId.isNotEmpty ? s.videoId : s.id, videoId: s.videoId.isNotEmpty ? s.videoId : s.id);
-    state = state.copyWith(queue: [n, ...state.queue], baseQueue: [n, ...state.baseQueue]);
+    
+    // Manual tracks should be inserted before the auto-added tail
+    final firstAutoIdx = state.queue.indexWhere((song) => song.isAutoAdded);
+    if (firstAutoIdx != -1) {
+      final newQueue = [...state.queue];
+      newQueue.insert(firstAutoIdx, n);
+      state = state.copyWith(queue: newQueue, baseQueue: newQueue);
+    } else {
+      state = state.copyWith(queue: [...state.queue, n], baseQueue: [...state.baseQueue, n]);
+    }
   }
 
   void playFromQueue(int i) {
     if (i < 0 || i >= state.queue.length) return;
     final s = state.queue[i];
     final before = state.queue.sublist(0, i);
-    state = state.copyWith(queue: state.queue.sublist(i + 1), history: [...before.reversed, ...state.history].length > 50 ? [...before.reversed, ...state.history].sublist(0, 50) : [...before.reversed, ...state.history]);
+    final newHistory = state.currentSong != null ? [...state.history, state.currentSong!, ...before] : [...state.history, ...before];
+    state = state.copyWith(
+      queue: state.queue.sublist(i + 1),
+      history: newHistory.length > 100 ? newHistory.sublist(newHistory.length - 100) : newHistory,
+    );
+    playSong(s);
+  }
+
+  void jumpToHistory(int i) {
+    if (i < 0 || i >= state.history.length) return;
+    final s = state.history[i];
+    final after = state.history.sublist(i + 1);
+    final newQueue = state.currentSong != null ? [...after, state.currentSong!, ...state.queue] : [...after, ...state.queue];
+    state = state.copyWith(
+      history: state.history.sublist(0, i),
+      queue: newQueue,
+    );
     playSong(s);
   }
 
@@ -516,24 +556,86 @@ class AudioNotifier extends Notifier<AudioState> {
   }
 
   Future<void> _fetchWatchNext(String vid) async {
+    if (!ref.read(settingsProvider).autoplayEnabled) return;
+    if (_autoFetchCount >= _maxAutoFetchBatches) return;
+    
+    final now = DateTime.now();
+    if (now.difference(_lastAutoFetchTime).inSeconds < 2) return;
+    _lastAutoFetchTime = now;
+
     try {
       final ts = await _musicApi.getWatchNext(vid);
       if (ts.isNotEmpty) {
-        final curIds = state.queue.map((s) => s.videoId).toSet();
-        final news = ts.where((t) => t.videoId != state.currentSong?.videoId && !curIds.contains(t.videoId)).map((t) => t.copyWith(playlistId: '__suggested__')).toList();
-        if (news.isNotEmpty) state = state.copyWith(queue: [...state.queue, ...news], baseQueue: [...state.baseQueue, ...news]);
+        final sessionIds = {
+          if (state.currentSong != null) state.currentSong!.videoId,
+          ...state.history.map((s) => s.videoId),
+          ...state.queue.map((s) => s.videoId),
+        };
+
+        final news = ts
+            .where((t) => !sessionIds.contains(t.videoId))
+            .map((t) => t.copyWith(playlistId: '__suggested__', isAutoAdded: true))
+            .toList();
+
+        if (news.isNotEmpty) {
+          _autoFetchCount++;
+          state = state.copyWith(queue: [...state.queue, ...news], baseQueue: [...state.baseQueue, ...news]);
+        }
       }
     } catch (_) {}
   }
 
   Future<void> _fetchWatchNextAndPlayFirst(String vid) async {
+    if (!ref.read(settingsProvider).autoplayEnabled) {
+      state = state.copyWith(isPlaying: false);
+      _crossfadeEngine.primaryPlayer.stop();
+      return;
+    }
+    if (_autoFetchCount >= _maxAutoFetchBatches) {
+      state = state.copyWith(isPlaying: false);
+      _crossfadeEngine.primaryPlayer.stop();
+      return;
+    }
+
+    final now = DateTime.now();
+    if (now.difference(_lastAutoFetchTime).inSeconds < 2) return;
+    _lastAutoFetchTime = now;
+
     try {
       final ts = await _musicApi.getWatchNext(vid);
       if (ts.isNotEmpty) {
-        final news = ts.map((t) => t.copyWith(playlistId: '__suggested__')).toList();
-        state = state.copyWith(queue: news.sublist(1)); playSong(news.first);
-      } else { state = state.copyWith(isPlaying: false); _crossfadeEngine.primaryPlayer.stop(); }
-    } catch (_) { state = state.copyWith(isPlaying: false); _crossfadeEngine.primaryPlayer.stop(); }
+        final sessionIds = {
+          if (state.currentSong != null) state.currentSong!.videoId,
+          ...state.history.map((s) => s.videoId),
+          ...state.queue.map((s) => s.videoId),
+        };
+
+        final news = ts
+            .where((t) => !sessionIds.contains(t.videoId))
+            .map((t) => t.copyWith(playlistId: '__suggested__', isAutoAdded: true))
+            .toList();
+
+        if (news.isNotEmpty) {
+          _autoFetchCount++;
+          final next = news.first;
+          final newHistory = state.currentSong != null ? [...state.history, state.currentSong!] : state.history;
+          state = state.copyWith(
+            queue: news.sublist(1),
+            history: newHistory.length > 100 ? newHistory.sublist(newHistory.length - 100) : newHistory,
+          );
+          playSong(next);
+        } else {
+          state = state.copyWith(isPlaying: false);
+          _crossfadeEngine.primaryPlayer.stop();
+        }
+      } else {
+        state = state.copyWith(isPlaying: false);
+        _crossfadeEngine.primaryPlayer.stop();
+      }
+    } catch (_) {
+      state = state.copyWith(isPlaying: false);
+      _crossfadeEngine.primaryPlayer.stop();
+    }
   }
 
   void _updateMediaItem(Song s) {
