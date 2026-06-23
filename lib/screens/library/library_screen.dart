@@ -304,10 +304,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
       itemCount: playlists.length,
+      addRepaintBoundaries: true,
+      addAutomaticKeepAlives: true,
       itemBuilder: (context, i) {
         final pl = playlists[i];
         final h = (180 + (i % 3) * 40).toDouble();
         return _MasonryPlaylistCard(
+          key: ValueKey('pl-masonry-${pl.id}'), // Stable key to prevent flickering
           playlist: pl,
           height: h,
           onTap: () => context.push('/playlist/${pl.id}'),
@@ -1172,7 +1175,7 @@ class _MasonryPlaylistCard extends ConsumerWidget {
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
-  const _MasonryPlaylistCard({required this.playlist, required this.height, required this.onTap, required this.onLongPress});
+  const _MasonryPlaylistCard({super.key, required this.playlist, required this.height, required this.onTap, required this.onLongPress});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1185,6 +1188,7 @@ class _MasonryPlaylistCard extends ConsumerWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
+          color: AppColors.surface, // Prevent transparent flicker
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.3),

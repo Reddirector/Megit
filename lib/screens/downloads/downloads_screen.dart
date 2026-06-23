@@ -952,16 +952,37 @@ class _QuadCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2, shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: songs.map((s) {
-        final url = ThumbnailUtils.getHighRes(s.thumbnail, size: 120);
-        return url.isNotEmpty
-            ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => Container(color: AppColors.surface))
-            : Container(color: AppColors.surface);
-      }).toList(),
+    return Column(
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(child: _buildItem(songs[0])),
+              Expanded(child: _buildItem(songs[1])),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(child: _buildItem(songs[2])),
+              Expanded(child: _buildItem(songs[3])),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildItem(Song s) {
+    final url = ThumbnailUtils.getHighRes(s.thumbnail, size: 120);
+    if (url.isEmpty) return Container(color: AppColors.surface);
+    return CachedNetworkImage(
+      imageUrl: url, 
+      fit: BoxFit.cover,
+      memCacheWidth: 120,
+      memCacheHeight: 120,
+      errorWidget: (_, __, ___) => Container(color: AppColors.surface),
     );
   }
 }
@@ -998,15 +1019,20 @@ class _MasonryDownloadCard extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                songsList.length >= 4
-                    ? _QuadCover(songs: songsList.take(4).toList())
-                    : (playlist.thumbnail != null && playlist.thumbnail!.isNotEmpty
-                        ? CachedNetworkImage(
-                            imageUrl: playlist.thumbnail!, 
-                            fit: BoxFit.cover, 
-                            memCacheWidth: 400, memCacheHeight: 400, // Task 4
-                            errorWidget: (_, __, ___) => Container(color: AppColors.surface))
-                        : Container(color: AppColors.surface, child: const Icon(LucideIcons.list_music, color: AppColors.textSecondary))),
+                if (songsList.length >= 4)
+                  _QuadCover(songs: songsList.take(4).toList())
+                else if (playlist.thumbnail != null && playlist.thumbnail!.isNotEmpty)
+                  CachedNetworkImage(
+                    imageUrl: playlist.thumbnail!, 
+                    fit: BoxFit.cover, 
+                    memCacheWidth: 400, memCacheHeight: 400, 
+                    errorWidget: (_, __, ___) => Container(color: AppColors.surface)
+                  )
+                else 
+                  Container(
+                    color: AppColors.surface, 
+                    child: const Icon(LucideIcons.list_music, color: AppColors.textSecondary)
+                  ),
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(

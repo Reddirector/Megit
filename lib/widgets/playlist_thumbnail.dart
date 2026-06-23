@@ -61,7 +61,12 @@ class PlaylistThumbnail extends StatelessWidget {
     if (playlist.customThumbnail != null && playlist.customThumbnail!.isNotEmpty) {
       try {
         final bytes = base64Decode(playlist.customThumbnail!);
-        return Image.memory(bytes, fit: BoxFit.cover);
+        return Image.memory(
+          bytes, 
+          fit: BoxFit.cover,
+          gaplessPlayback: true, // Prevent flicker on update
+          key: ValueKey('custom-thumb-${playlist.id}-${bytes.length}'), 
+        );
       } catch (e) {
         debugPrint('Error decoding custom thumbnail: $e');
       }
@@ -134,22 +139,40 @@ class _QuadCover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: songs.map((s) {
-        final url = ThumbnailUtils.getHighRes(s.thumbnail, size: 120);
-        return url.isNotEmpty
-            ? CachedNetworkImage(
-                imageUrl: url,
-                fit: BoxFit.cover,
-                memCacheWidth: 120, // Task 4: Fix thumbnail memory usage
-                memCacheHeight: 120,
-                errorWidget: (_, __, ___) => Container(color: AppColors.surface),
-              )
-            : Container(color: AppColors.surface);
-      }).toList(),
+    return Column(
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(child: _buildItem(songs[0])),
+              Expanded(child: _buildItem(songs[1])),
+            ],
+          ),
+        ),
+        Expanded(
+          child: Row(
+            children: [
+              Expanded(child: _buildItem(songs[2])),
+              Expanded(child: _buildItem(songs[3])),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildItem(Song s) {
+    final url = ThumbnailUtils.getHighRes(s.thumbnail, size: 120);
+    if (url.isEmpty) return Container(color: AppColors.surface);
+    return CachedNetworkImage(
+      key: ValueKey('quad-item-${s.videoId}'), // Stable key
+      imageUrl: url, 
+      fit: BoxFit.cover,
+      memCacheWidth: 120,
+      memCacheHeight: 120,
+      fadeOutDuration: Duration.zero,
+      fadeInDuration: const Duration(milliseconds: 200),
+      errorWidget: (_, __, ___) => Container(color: AppColors.surface),
     );
   }
 }
