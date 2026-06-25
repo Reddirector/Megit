@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../core/theme/app_colors.dart';
-import '../core/utils/thumbnail_utils.dart';
 import '../data/models/song.dart';
 import '../providers/playlist_provider.dart';
 import 'glass_container.dart';
+import 'playlist_thumbnail.dart';
 import '../main.dart' show scaffoldMessengerKey;
 
 /// Add-to-playlist bottom sheet — port of AddToPlaylistModal.jsx.
@@ -135,26 +134,19 @@ class AddToPlaylistSheet extends ConsumerWidget {
                                   width: 48, height: 48,
                                   child: Stack(
                                     children: [
+                                      // PlaylistThumbnail handles custom banner ->
+                                      // custom color/text -> quad-cover -> song
+                                      // thumbnail -> placeholder. This row used to
+                                      // skip straight from quad-cover to a single
+                                      // network thumbnail and never checked for a
+                                      // custom banner/color at all.
                                       Positioned.fill(
-                                        child: pl.songs.length >= 4
-                                            ? _QuadCover(songs: pl.songs.take(4).toList())
-                                            : (pl.songs.isNotEmpty || (pl.thumbnail != null && pl.thumbnail!.isNotEmpty)
-                                                ? CachedNetworkImage(
-                                                    imageUrl: ThumbnailUtils.getHighRes(
-                                                      (pl.thumbnail != null && pl.thumbnail!.isNotEmpty) 
-                                                          ? pl.thumbnail! 
-                                                          : pl.songs.first.thumbnail, 
-                                                      size: 120),
-                                                    fit: BoxFit.cover,
-                                                    errorWidget: (_, __, ___) => Container(color: AppColors.surface))
-                                                : Container(
-                                                    color: AppColors.surface,
-                                                    child: Icon(
-                                                      LucideIcons.list_music,
-                                                      size: 20,
-                                                      color: AppColors.textSecondary,
-                                                    ),
-                                                  )),
+                                        child: PlaylistThumbnail(
+                                          playlist: pl,
+                                          width: 48,
+                                          height: 48,
+                                          borderRadius: 0,
+                                        ),
                                       ),
                                       if (alreadyAdded)
                                         Positioned.fill(
@@ -293,26 +285,6 @@ class AddToPlaylistSheet extends ConsumerWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _QuadCover extends StatelessWidget {
-  final List<Song> songs;
-  const _QuadCover({required this.songs});
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2, shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      children: songs.map((s) {
-        final url = s.thumbnail.isNotEmpty ? s.thumbnail : ''; // Simple thumbnail
-        return url.isNotEmpty
-            ? CachedNetworkImage(imageUrl: url, fit: BoxFit.cover,
-                errorWidget: (_, __, ___) => Container(color: AppColors.surface))
-            : Container(color: AppColors.surface);
-      }).toList(),
     );
   }
 }

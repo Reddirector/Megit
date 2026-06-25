@@ -21,9 +21,10 @@ class StreamExtractor {
   /// Executes on a background isolate to keep UI smooth (Task 2 Fix).
   static Future<String> getAudioStreamUrl(String videoId, {String quality = 'automatic'}) async {
     // 1. Check Cache (must happen on the calling/main isolate — see note below)
-    final cached = _urlCache[videoId];
+    final cacheKey = '$videoId:$quality';
+    final cached = _urlCache[cacheKey];
     if (cached != null && !cached.isExpired) {
-      debugPrint('[StreamExtractor] ⚡ Cache hit for $videoId');
+      debugPrint('[StreamExtractor] Cache hit for $videoId ($quality)');
       return cached.url;
     }
 
@@ -34,7 +35,7 @@ class StreamExtractor {
     // isolate's copy and never be visible here. So the cache is written here,
     // on the main isolate, using the value returned back from the isolate.
     final url = await compute((_) => _extractInternal(videoId, quality), null);
-    _urlCache[videoId] = _StreamCacheEntry(url, DateTime.now().add(const Duration(hours: 1)));
+    _urlCache[cacheKey] = _StreamCacheEntry(url, DateTime.now().add(const Duration(hours: 1)));
     return url;
   }
 

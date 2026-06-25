@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
 /// Custom [BaseAudioHandler] for Megit — bridges `just_audio` with `audio_service`
@@ -43,15 +44,31 @@ class MegitAudioHandler extends BaseAudioHandler with SeekHandler {
     _stateSub?.cancel();
     _eventSub?.cancel();
 
-    _stateSub = _activePlayer.playerStateStream.listen((playerState) {
-      _broadcastState(playerState);
-    });
+    // Both listeners now pass onError. just_audio delivers playback failures
+    // (e.g. an ExoPlayer read timeout / connection reset while buffering on a
+    // slow mobile connection) as stream errors, not as data events. Without
+    // an onError callback here, that error had nowhere to go: it never
+    // reached the audio provider's retry/skip logic, so the song just went
+    // silent with no recovery and no UI feedback.
+    _stateSub = _activePlayer.playerStateStream.listen(
+      (playerState) {
+        _broadcastState(playerState);
+      },
+      onError: (Object e, StackTrace st) {
+        debugPrint('[AudioHandler] playerStateStream error: $e');
+      },
+    );
 
-    _eventSub = _activePlayer.playbackEventStream.listen((event) {
-      if (event.processingState == ProcessingState.completed) {
-        onTrackEnded?.call();
-      }
-    });
+    _eventSub = _activePlayer.playbackEventStream.listen(
+      (event) {
+        if (event.processingState == ProcessingState.completed) {
+          onTrackEnded?.call();
+        }
+      },
+      onError: (Object e, StackTrace st) {
+        debugPrint('[AudioHandler] playbackEventStream error: $e');
+      },
+    );
   }
 
   @override

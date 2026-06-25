@@ -10,6 +10,7 @@ import '../data/models/song.dart';
 import '../core/utils/thumbnail_utils.dart';
 import '../services/audio_handler.dart';
 import '../services/crossfade_engine.dart';
+import '../services/network_quality_service.dart';
 import '../services/stream_extractor.dart';
 import '../main.dart' show scaffoldMessengerKey;
 import 'auth_provider.dart';
@@ -96,6 +97,7 @@ class AudioNotifier extends Notifier<AudioState> {
   bool _isPreloadingNext = false;
   int _consecutiveFailures = 0;
   bool _isInitialized = false;
+  bool _isRecoveringFromStreamError = false;
 
   int _autoFetchCount = 0;
   static const int _maxAutoFetchBatches = 15;
@@ -163,11 +165,15 @@ class AudioNotifier extends Notifier<AudioState> {
         _lastPositionBroadcast = now;
         state = state.copyWith(progress: pos);
       }
+    }, onError: (Object e, StackTrace st) {
+      debugPrint('[Audio] positionStream error: $e');
     });
 
     _bufferedSub = player.bufferedPositionStream.listen((buffered) {
       if (_isTransitioning) return;
       state = state.copyWith(bufferedProgress: buffered);
+    }, onError: (Object e, StackTrace st) {
+      debugPrint('[Audio] bufferedPositionStream error: $e');
     });
 
     _durationSub = player.durationStream.listen((dur) {
@@ -176,6 +182,8 @@ class AudioNotifier extends Notifier<AudioState> {
         state = state.copyWith(duration: dur);
         _updateMediaItemDuration(dur);
       }
+    }, onError: (Object e, StackTrace st) {
+      debugPrint('[Audio] durationStream error: $e');
     });
 
     _playerStateSub = player.playerStateStream.listen((ps) {
@@ -189,6 +197,28 @@ class AudioNotifier extends Notifier<AudioState> {
       
       state = state.copyWith(isPlaying: ps.playing, isLoading: isLoading);
       if (ps.playing) WakelockPlus.enable(); else WakelockPlus.disable();
+    }, onError: _onPlaybackStreamError);
+  }
+
+  // Previously there was no onError handler anywhere on these player
+  // streams. just_audio surfaces playback failures (an ExoPlayer read
+  // timeout / connection reset mid-buffer — common on a slow mobile-data
+  // connection) as stream errors, not as a data event. With nothing
+  // listening for them, a song could start, stall a few seconds in when the
+  // CDN connection hiccuped, and just go silent forever with no retry, no
+  // skip, and no UI feedback. This routes that failure into the same
+  // retry/skip path used for a failed initial load.
+  void _onPlaybackStreamError(Object error, StackTrace stackTrace) {
+    debugPrint('[Audio] Player stream error: $error');
+    if (_isRecoveringFromStreamError) return;
+    if (_isTransitioning || _crossfadeEngine.isCrossfading || _isCrossfadePending) return;
+    final song = state.currentSong;
+    if (song == null) return;
+
+    _isRecoveringFromStreamError = true;
+    final gen = _loadGeneration;
+    _startPlayback(song, null, gen).whenComplete(() {
+      _isRecoveringFromStreamError = false;
     });
   }
 
@@ -273,8 +303,15 @@ class AudioNotifier extends Notifier<AudioState> {
     });
   }
 
-  Future<void> _startPlayback(Song normalized, String? offlineFilePath, int myGen) async {
+  /// Resolves the user's streaming-quality preference against the current
+  /// connection (Wi-Fi vs mobile data). See NetworkQualityService for why
+  /// this matters: "automatic" used to be a no-op that always meant "high".
+  Future<String> _resolvedStreamingQuality() =>
+      NetworkQualityService.resolveQuality(ref.read(settingsProvider).streamingQuality);
+
+  Future<void> _startPlayback(Song normalized, String? offlineFilePath, int myGen, {bool forceLowQuality = false}) async {
     _isTransitioning = true;
+    bool attemptedNetworkFetch = false;
     try {
       final player = _crossfadeEngine.primaryPlayer;
       await player.stop();
@@ -301,45 +338,69 @@ class AudioNotifier extends Notifier<AudioState> {
         }
       }
 
+      // Pick a bitrate that actually matches the current connection.
+      // "automatic" used to silently behave exactly like "high" regardless
+      // of network type (see StreamExtractor) — that's the main reason a
+      // song that loads instantly on Wi-Fi would stall or never start on
+      // mobile data: the player was always being handed the highest-bitrate
+      // stream available, no matter how much throughput the connection could
+      // actually sustain. forceLowQuality (set on the retry below) skips the
+      // network check entirely and goes straight for the smallest stream.
+      attemptedNetworkFetch = true;
+      final quality = forceLowQuality ? 'low' : await _resolvedStreamingQuality();
+
       // Robust extraction
       final streamUrl = await StreamExtractor.getAudioStreamUrl(normalized.videoId, 
-        quality: ref.read(settingsProvider).streamingQuality
+        quality: quality,
       ).timeout(const Duration(seconds: 20));
       
       if (_loadGeneration != myGen) return;
       
-      await player.setUrl(streamUrl);
+      // setUrl() previously had no timeout at all, so a stalled connection
+      // on mobile data could leave the player stuck silently "loading"
+      // forever — never throwing, so the retry/skip logic below never ran.
+      await player.setUrl(streamUrl).timeout(const Duration(seconds: 20));
       if (_loadGeneration == myGen) {
         await player.play();
         _consecutiveFailures = 0; // Success: reset circuit breaker
       }
     } catch (e) {
-      if (_loadGeneration == myGen) {
-        debugPrint('[Audio] Playback error: $e');
+      if (_loadGeneration != myGen) return;
+      debugPrint('[Audio] Playback error (quality=${forceLowQuality ? "low/retry" : "auto"}): $e');
 
-        // Force-silence the player no matter what failed above (extraction,
-        // setUrl, play() — even the initial stop() itself can occasionally
-        // throw on ExoPlayer). Without this, a failed attempt could leave
-        // whatever was previously loaded still audible while the UI has
-        // already moved on to showing the new track.
-        try {
-          await _crossfadeEngine.primaryPlayer.stop();
-        } catch (_) {}
+      // Force-silence the player no matter what failed above (extraction,
+      // setUrl, play() — even the initial stop() itself can occasionally
+      // throw on ExoPlayer). Without this, a failed attempt could leave
+      // whatever was previously loaded still audible while the UI has
+      // already moved on to showing the new track.
+      try {
+        await _crossfadeEngine.primaryPlayer.stop();
+      } catch (_) {}
 
-        state = state.copyWith(isLoading: false);
-        
-        // Circuit breaker: stop loop after 3 consecutive song failures
-        _consecutiveFailures++;
-        _isTransitioning = false;
-        if (_consecutiveFailures >= 3) {
-          state = state.copyWith(isPlaying: false);
-          scaffoldMessengerKey.currentState?.showSnackBar(
-            const SnackBar(content: Text("Couldn't load this track right now. Streaming may be temporarily unavailable — try again shortly."))
-          );
-        } else {
-          // Move to next track automatically on failure (single attempt per song)
-          playNext();
-        }
+      // One automatic downgrade-and-retry before giving up on the song.
+      // This is the actual fix for "plays fine on Wi-Fi, never plays on
+      // mobile data": the overwhelming majority of failures here are a slow
+      // or timed-out fetch/buffer of a stream the connection can't keep up
+      // with — not an unplayable video — so retrying once at the lowest
+      // available bitrate usually succeeds where the first attempt stalled.
+      if (attemptedNetworkFetch && !forceLowQuality) {
+        await _startPlayback(normalized, offlineFilePath, myGen, forceLowQuality: true);
+        return;
+      }
+
+      state = state.copyWith(isLoading: false);
+      
+      // Circuit breaker: stop loop after 3 consecutive song failures
+      _consecutiveFailures++;
+      _isTransitioning = false;
+      if (_consecutiveFailures >= 3) {
+        state = state.copyWith(isPlaying: false);
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          const SnackBar(content: Text("Couldn't load this track right now. Streaming may be temporarily unavailable — try again shortly."))
+        );
+      } else {
+        // Move to next track automatically on failure (single attempt per song)
+        playNext();
       }
     } finally {
       // Safety check to ensure flag is cleared.
@@ -512,7 +573,7 @@ class AudioNotifier extends Notifier<AudioState> {
       final dls = ref.read(downloadProvider.notifier);
       String? path; String? url;
       if (await dls.isDownloaded(next.videoId)) path = await dls.getFilePath(next.videoId);
-      else url = await StreamExtractor.getAudioStreamUrl(next.videoId, quality: ref.read(settingsProvider).streamingQuality).timeout(const Duration(seconds: 15));
+      else url = await StreamExtractor.getAudioStreamUrl(next.videoId, quality: await _resolvedStreamingQuality()).timeout(const Duration(seconds: 15));
       if (await _crossfadeEngine.prepareCrossfade(nextUrl: url, localFilePath: path)) _preloadedNextSongId = next.videoId;
     } catch (_) {} finally { _isPreloadingNext = false; }
   }
@@ -533,7 +594,7 @@ class AudioNotifier extends Notifier<AudioState> {
       try {
         final dls = ref.read(downloadProvider.notifier);
         if (await dls.isDownloaded(next.videoId)) path = await dls.getFilePath(next.videoId);
-        else url = await StreamExtractor.getAudioStreamUrl(next.videoId, quality: ref.read(settingsProvider).streamingQuality).timeout(const Duration(seconds: 15));
+        else url = await StreamExtractor.getAudioStreamUrl(next.videoId, quality: await _resolvedStreamingQuality()).timeout(const Duration(seconds: 15));
       } catch (_) { if (_loadGeneration == gen) { _isCrossfadePending = false; playNext(); } return; }
     }
     _preloadedNextSongId = null;

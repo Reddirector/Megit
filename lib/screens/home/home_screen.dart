@@ -2,22 +2,20 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_lucide/flutter_lucide.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import '../../widgets/song_cards.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/thumbnail_utils.dart';
-import '../../data/models/song.dart';
+import '../../data/models/playlist.dart';
 import '../../data/models/home_section.dart';
 import '../../providers/audio_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/playlist_provider.dart';
 import '../../providers/home_provider.dart';
+import '../../widgets/playlist_thumbnail.dart';
 import '../../widgets/skeleton_loader.dart';
 import '../../widgets/song_action_sheet.dart';
-import '../../widgets/playing_bars.dart';
 
 /// Home screen — Optimized with Slivers for 60FPS performance.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -352,14 +350,12 @@ class _HomeSectionWidget extends ConsumerWidget {
 }
 
 class _RecentPlaylistCard extends StatelessWidget {
-  final dynamic playlist;
+  final Playlist playlist;
   final AudioState audio;
   const _RecentPlaylistCard({required this.playlist, required this.audio});
 
   @override
   Widget build(BuildContext context) {
-    final songs = (playlist.songs as List<dynamic>?) ?? [];
-    final thumb = songs.isNotEmpty ? ThumbnailUtils.getHighRes((songs.first as dynamic).thumbnail ?? '', size: 200) : '';
     final isPlayingThis = audio.contextPlaylistId == playlist.id;
 
     return Material(
@@ -375,33 +371,23 @@ class _RecentPlaylistCard extends StatelessWidget {
           ),
           child: Row(
             children: [
+              // PlaylistThumbnail already handles custom banner image -> custom
+              // color/text -> quad-cover -> song thumbnail -> placeholder, in
+              // that order, plus the "now playing" overlay. This card used to
+              // rebuild a cruder version of that logic by hand and never once
+              // checked for a custom banner/color, which is why a banner set
+              // on a playlist never showed up here.
               ClipRRect(
                 borderRadius: const BorderRadius.only(topLeft: Radius.circular(14), bottomLeft: Radius.circular(14)),
-                child: SizedBox(
-                  width: 62, height: 62,
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: Hero(
-                          tag: 'pl-thumb-${playlist.id}',
-                          child: songs.length >= 4
-                              ? _QuadCover(songs: songs.take(4).map((s) => s as Song).toList())
-                              : (thumb.isNotEmpty
-                                  ? CachedNetworkImage(
-                                      imageUrl: thumb, fit: BoxFit.cover,
-                                      memCacheWidth: 150, memCacheHeight: 150, // Task 4
-                                      errorWidget: (_, __, ___) => Container(color: AppColors.surface))
-                                  : Container(color: AppColors.surface)),
-                        ),
-                      ),
-                      if (isPlayingThis)
-                        Positioned.fill(
-                          child: Container(
-                            color: Colors.black54,
-                            child: Center(child: PlayingBars(color: Theme.of(context).colorScheme.primary, height: 18, isPaused: !audio.isPlaying)),
-                          ),
-                        ),
-                    ],
+                child: Hero(
+                  tag: 'pl-thumb-${playlist.id}',
+                  child: PlaylistThumbnail(
+                    playlist: playlist,
+                    width: 62,
+                    height: 62,
+                    borderRadius: 0,
+                    isCurrentContext: isPlayingThis,
+                    isPaused: !audio.isPlaying,
                   ),
                 ),
               ),
@@ -411,9 +397,9 @@ class _RecentPlaylistCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(playlist.name ?? '', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary, letterSpacing: -0.2)),
+                    Text(playlist.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary, letterSpacing: -0.2)),
                     const SizedBox(height: 2),
-                    Text('${songs.length} tracks', style: const TextStyle(fontSize: 11, color: AppColors.textTertiary, fontWeight: FontWeight.w500)),
+                    Text('${playlist.songs.length} tracks', style: const TextStyle(fontSize: 11, color: AppColors.textTertiary, fontWeight: FontWeight.w500)),
                   ],
                 ),
               ),
@@ -422,27 +408,6 @@ class _RecentPlaylistCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _QuadCover extends StatelessWidget {
-  final List<Song> songs;
-  const _QuadCover({required this.songs});
-
-  @override
-  Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-      children: songs.map((s) {
-        final url = ThumbnailUtils.getHighRes(s.thumbnail, size: 120);
-        return url.isNotEmpty
-            ? CachedNetworkImage(
-                imageUrl: url, fit: BoxFit.cover,
-                memCacheWidth: 100, memCacheHeight: 100, // Task 4
-                errorWidget: (_, __, ___) => Container(color: AppColors.surface))
-            : Container(color: AppColors.surface);
-      }).toList(),
     );
   }
 }

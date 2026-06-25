@@ -32,7 +32,7 @@ class SettingsState {
   final LayoutMode playlistLayoutMode;
 
   const SettingsState({
-    this.streamingQuality = 'high',
+    this.streamingQuality = 'automatic',
     this.downloadQuality = 'high',
     this.crossfadeDuration = 9,
     this.dataSaverMode = false,
@@ -100,7 +100,7 @@ class SettingsState {
       };
 
   factory SettingsState.fromJson(Map<String, dynamic> json) => SettingsState(
-        streamingQuality: json['streamingQuality'] ?? 'high',
+        streamingQuality: json['streamingQuality'] ?? 'automatic',
         downloadQuality: json['downloadQuality'] ?? 'high',
         crossfadeDuration: json['crossfadeDuration'] ?? 9,
         dataSaverMode: json['dataSaverMode'] ?? false,
@@ -142,7 +142,11 @@ class SettingsNotifier extends Notifier<SettingsState> {
   Future<void> _loadFromDisk() async {
     final prefs = await SharedPreferences.getInstance();
     state = state.copyWith(
-      streamingQuality: _toFrontend(prefs.getString('megit_streaming_quality') ?? 'high'),
+      // 'auto' is the on-disk encoding of 'automatic' (see _toFrontend/_toBackend
+      // below). Falling back to 'high' here would silently overwrite the new
+      // SettingsState() default of 'automatic' the instant this loads on a
+      // fresh install, defeating the whole point of defaulting to it.
+      streamingQuality: _toFrontend(prefs.getString('megit_streaming_quality') ?? 'auto'),
       downloadQuality: _toFrontend(prefs.getString('megit_download_quality') ?? 'high'),
       crossfadeDuration: prefs.getInt('megit_crossfade') ?? 9,
       dataSaverMode: prefs.getBool('megit_data_saver') ?? false,

@@ -31,10 +31,11 @@ class PlaylistCover extends StatelessWidget {
   }
 
   Widget _buildCoverContent() {
-    // 1. Custom Image (Base64)
+    // 1. Custom Image (Base64). Stored as raw base64 (no data: URL prefix) —
+    // see ThumbnailPickerModal, the only place that writes this field.
     if (playlist.customThumbnail != null && playlist.customThumbnail!.isNotEmpty) {
       try {
-        final bytes = base64Decode(playlist.customThumbnail!.split(',')[1]);
+        final bytes = base64Decode(playlist.customThumbnail!);
         return Image.memory(bytes, fit: BoxFit.cover);
       } catch (_) {}
     }

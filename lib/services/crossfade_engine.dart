@@ -59,7 +59,10 @@ class CrossfadeEngine {
       if (localFilePath != null) {
         await _crossfadePlayer.setFilePath(localFilePath);
       } else {
-        await _crossfadePlayer.setUrl(nextUrl!, headers: headers);
+        // No timeout here previously — a stalled connection on mobile data
+        // could leave this awaiting forever instead of returning false so
+        // the caller falls back to a normal (non-crossfaded) transition.
+        await _crossfadePlayer.setUrl(nextUrl!, headers: headers).timeout(const Duration(seconds: 20));
       }
       
       _isPrepared = true;
@@ -99,7 +102,7 @@ class CrossfadeEngine {
         if (localFilePath != null) {
           await _crossfadePlayer.setFilePath(localFilePath);
         } else {
-          await _crossfadePlayer.setUrl(nextUrl!, headers: headers);
+          await _crossfadePlayer.setUrl(nextUrl!, headers: headers).timeout(const Duration(seconds: 20));
         }
       }
 
