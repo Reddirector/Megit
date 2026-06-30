@@ -39,8 +39,6 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
   bool _offlineLoading = false;
   bool _ytmError = false;
   String _trackFilter = '';
-  String _sortKey = 'recent';
-  String _sortOrder = 'desc';
   bool _showSortDropdown = false;
 
   @override
@@ -102,6 +100,10 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     final auth = ref.watch(authProvider);
     final accent = Theme.of(context).colorScheme.primary;
 
+    final settings = ref.watch(settingsProvider);
+    final sortKey = settings.playlistSortKey;
+    final sortOrder = settings.playlistSortOrder;
+
     // Source: Firestore playlist or YTM playlist or Offline playlist
     final isOffline = widget.playlistId.startsWith('__pl__') || widget.playlistId == '__downloads__';
     final firestorePlaylist = playlistState.playlists.cast<dynamic>().firstWhere(
@@ -139,13 +141,13 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           s.title.toLowerCase().contains(q) ||
           s.artist.toLowerCase().contains(q)).toList();
     }
-    if (_sortKey == 'alpha') {
+    if (sortKey == 'alpha') {
       songsToRender.sort((a, b) {
         final cmp = a.title.toLowerCase().compareTo(b.title.toLowerCase());
-        return _sortOrder == 'desc' ? cmp : -cmp;
+        return sortOrder == 'desc' ? cmp : -cmp;
       });
     } else {
-      if (_sortOrder == 'asc') {
+      if (sortOrder == 'asc') {
         songsToRender = songsToRender.reversed.toList();
       }
     }
@@ -296,12 +298,12 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                             const Icon(LucideIcons.arrow_up_down,
                                 size: 16, color: AppColors.textSecondary),
                             const SizedBox(width: 8),
-                            Text(_sortKey == 'alpha' ? 'A-Z' : 'Recent',
+                            Text(sortKey == 'alpha' ? 'A-Z' : 'Recent',
                                 style: const TextStyle(
                                     fontSize: 13, color: AppColors.textSecondary)),
                             const SizedBox(width: 4),
                             Icon(
-                              _sortOrder == 'asc'
+                              sortOrder == 'asc'
                                   ? LucideIcons.arrow_up : LucideIcons.arrow_down,
                               size: 14, color: AppColors.textSecondary,
                             ),
@@ -398,8 +400,8 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                _sortOption('Recently Added', 'recent', accent),
-                                _sortOption('Alphabetical', 'alpha', accent),
+                                _sortOption('Recently Added', 'recent', accent, sortKey, sortOrder),
+                                _sortOption('Alphabetical', 'alpha', accent, sortKey, sortOrder),
                               ],
                             ),
                           ),
@@ -443,15 +445,15 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     );
   }
 
-  Widget _sortOption(String label, String key, Color accent) {
-    final isActive = _sortKey == key;
+  Widget _sortOption(String label, String key, Color accent, String currentKey, String currentOrder) {
+    final isActive = currentKey == key;
     return InkWell(
       onTap: () {
-        if (_sortKey == key) {
-          setState(() => _sortOrder = _sortOrder == 'asc' ? 'desc' : 'asc');
-        } else {
-          setState(() { _sortKey = key; _sortOrder = 'desc'; });
+        String nextOrder = 'desc';
+        if (currentKey == key) {
+          nextOrder = currentOrder == 'asc' ? 'desc' : 'asc';
         }
+        ref.read(settingsProvider.notifier).setPlaylistSort(key, nextOrder);
         setState(() => _showSortDropdown = false);
       },
       child: Padding(
@@ -464,7 +466,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                 fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                 color: isActive ? accent : AppColors.textPrimary)),
             if (isActive)
-              Icon(_sortOrder == 'asc' ? LucideIcons.arrow_up : LucideIcons.arrow_down,
+              Icon(currentOrder == 'asc' ? LucideIcons.arrow_up : LucideIcons.arrow_down,
                   size: 14, color: accent),
           ],
         ),

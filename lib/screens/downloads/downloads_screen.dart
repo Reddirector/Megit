@@ -26,7 +26,6 @@ class DownloadsScreen extends ConsumerStatefulWidget {
 
 class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   List<Song> _songs = [];
-  List<Playlist> _offlinePlaylists = [];
   List<Playlist> _baseOfflinePlaylists = [];
   bool _loading = true;
   bool _showClearConfirm = false;
@@ -68,7 +67,6 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
 
       if (mounted) {
         setState(() { _songs = songs; _baseOfflinePlaylists = allPlaylists; _loading = false; });
-        _applySorting();
       }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
@@ -81,38 +79,6 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     setState(() { _songs = []; _showClearConfirm = false; });
   }
 
-  void _applySorting() {
-    var playlists = List<Playlist>.from(_baseOfflinePlaylists);
-    
-    Playlist? downloadsPlaylist;
-    final dlIdx = playlists.indexWhere((p) => p.id == '__downloads__');
-    if (dlIdx != -1) {
-      downloadsPlaylist = playlists.removeAt(dlIdx);
-    }
-
-    final settings = ref.read(settingsProvider);
-    final sortKey = settings.downloadsSortKey;
-    final sortOrder = settings.downloadsSortOrder;
-
-    if (sortKey == 'alpha') {
-      playlists.sort((a, b) {
-        final cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
-        return sortOrder == 'desc' ? cmp : -cmp;
-      });
-    } else {
-      if (sortOrder == 'asc') {
-        playlists = playlists.reversed.toList();
-      }
-    }
-
-    setState(() {
-      _offlinePlaylists = [
-        if (downloadsPlaylist != null) downloadsPlaylist,
-        ...playlists,
-      ];
-    });
-  }
-
   void _handleSort(String key, String currentKey, String currentOrder) {
     String nextOrder = 'desc';
     if (currentKey == key) {
@@ -120,7 +86,6 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     }
     ref.read(settingsProvider.notifier).setDownloadsSort(key, nextOrder);
     setState(() => _showSortDropdown = false);
-    _applySorting();
   }
 
   String _formatSize(int bytes) {
@@ -135,8 +100,8 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   Widget _buildDownloadsContent(List<Playlist> playlists, AudioState audio) {
     final mode = ref.watch(settingsProvider.select((s) => s.downloadsLayoutMode));
 
-    if (mode == LayoutMode.list) return _buildListView(audio);
-    if (mode == LayoutMode.grid) return _buildGridView(audio);
+    if (mode == LayoutMode.list) return _buildListView(playlists, audio);
+    if (mode == LayoutMode.grid) return _buildGridView(playlists, audio);
 
     return MasonryGridView.count(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 140),
@@ -169,6 +134,28 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     final sortKey = settings.downloadsSortKey;
     final sortOrder = settings.downloadsSortOrder;
 
+    // Derive sorted playlists
+    var playlists = List<Playlist>.from(_baseOfflinePlaylists);
+    Playlist? downloadsPlaylist;
+    final dlIdx = playlists.indexWhere((p) => p.id == '__downloads__');
+    if (dlIdx != -1) {
+      downloadsPlaylist = playlists.removeAt(dlIdx);
+    }
+    if (sortKey == 'alpha') {
+      playlists.sort((a, b) {
+        final cmp = a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        return sortOrder == 'desc' ? cmp : -cmp;
+      });
+    } else {
+      if (sortOrder == 'asc') {
+        playlists = playlists.reversed.toList();
+      }
+    }
+    final sortedPlaylists = [
+      if (downloadsPlaylist != null) downloadsPlaylist,
+      ...playlists,
+    ];
+
     return Scaffold(
       body: SafeArea(
         child: Stack(
@@ -193,7 +180,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                                 _showSortDropdown = !_showSortDropdown),
                             onTapToggle: () => _handleSort(sortKey, sortKey, sortOrder),
                           ),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: 12),
                           // View toggle
                           Consumer(
                             builder: (context, ref, _) {
@@ -256,7 +243,7 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
                                 ],
                               ),
                             )
-                          : _buildDownloadsContent(_offlinePlaylists, audio),
+                          : _buildDownloadsContent(sortedPlaylists, audio),
                 ),
               ],
             ),
@@ -356,12 +343,12 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
   }
 
 
-  Widget _buildListView(AudioState audio) {
+  Widget _buildListView(List<Playlist> playlists, AudioState audio) {
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 120),
-      itemCount: _offlinePlaylists.length,
+      itemCount: playlists.length,
       itemBuilder: (context, i) {
-        final pl = _offlinePlaylists[i];
+        final pl = playlists[i];
         final thumb = ThumbnailUtils.getHighRes(pl.thumbnail ?? '', size: 200);
         final songsList = (pl.songs as List<dynamic>).map((s) => s is Song ? s : Song.fromJson(s as Map<String, dynamic>)).toList();
         return ListTile(
@@ -414,16 +401,16 @@ class _DownloadsScreenState extends ConsumerState<DownloadsScreen> {
     );
   }
 
-  Widget _buildGridView(AudioState audio) {
+  Widget _buildGridView(List<Playlist> playlists, AudioState audio) {
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 140),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3, childAspectRatio: 0.75,
         crossAxisSpacing: 12, mainAxisSpacing: 12,
       ),
-      itemCount: _offlinePlaylists.length,
+      itemCount: playlists.length,
       itemBuilder: (context, i) {
-        final pl = _offlinePlaylists[i];
+        final pl = playlists[i];
         final thumb = ThumbnailUtils.getHighRes(pl.thumbnail ?? '', size: 300);
         final songsList = (pl.songs as List<dynamic>).map((s) => s is Song ? s : Song.fromJson(s as Map<String, dynamic>)).toList();
         return GestureDetector(

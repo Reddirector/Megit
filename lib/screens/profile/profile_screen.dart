@@ -478,7 +478,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                           BoxShadow(color: accent.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 8)),
                         ],
                       ),
-                      child: const Icon(LucideIcons.audio_waveform, size: 30, color: Colors.white),
+                      child: Center(
+                        child: Image.asset('assets/icon.png', width: 32, height: 32),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     const Text('MEGIT',

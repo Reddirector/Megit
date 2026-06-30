@@ -265,6 +265,7 @@ class AudioNotifier extends Notifier<AudioState> {
     // --- STEP 1: IMMEDIATE FEEDBACK ---
     final myGen = ++_loadGeneration;
     _crossfadeEngine.cancelCrossfade();
+    _isCrossfadePending = false;
     _statsThresholdReached = false;
     if (clearQueue) _autoFetchCount = 0;
     
@@ -602,7 +603,11 @@ class AudioNotifier extends Notifier<AudioState> {
     try {
       final ok = await _crossfadeEngine.startCrossfade(fadeDuration: fade, nextUrl: url, localFilePath: path);
       if (_loadGeneration == gen) { if (ok) { _pendingSong = next; _pendingQueue = rem; } else playNext(); }
-    } catch (_) { if (_loadGeneration == gen) playNext(); } finally { if (_loadGeneration == gen) _isCrossfadePending = false; }
+    } catch (_) {
+      if (_loadGeneration == gen) playNext();
+    } finally {
+      _isCrossfadePending = false;
+    }
   }
 
   Song? _pendingSong; List<Song>? _pendingQueue;

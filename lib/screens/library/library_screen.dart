@@ -145,7 +145,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                                 onTap: () => setState(() =>
                                     _showSortDropdown = !_showSortDropdown),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 12),
                               // Downloads button
                               GestureDetector(
                                 onTap: () => context.push('/downloads'),
@@ -155,7 +155,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                                       size: 18, color: AppColors.textSecondary),
                                 ),
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 12),
                               // Layout Selector
                               const SizedBox(width: 4),
                               Consumer(

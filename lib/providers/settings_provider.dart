@@ -28,6 +28,10 @@ class SettingsState {
   final String downloadsSortKey;
   final String downloadsSortOrder;
 
+  // Playlist view preferences
+  final String playlistSortKey;
+  final String playlistSortOrder;
+
   // General Playlist/Section Layout
   final LayoutMode playlistLayoutMode;
 
@@ -45,6 +49,8 @@ class SettingsState {
     this.downloadsLayoutMode = LayoutMode.masonry,
     this.downloadsSortKey = 'recent',
     this.downloadsSortOrder = 'desc',
+    this.playlistSortKey = 'recent',
+    this.playlistSortOrder = 'desc',
     this.playlistLayoutMode = LayoutMode.masonry,
   });
 
@@ -62,6 +68,8 @@ class SettingsState {
     LayoutMode? downloadsLayoutMode,
     String? downloadsSortKey,
     String? downloadsSortOrder,
+    String? playlistSortKey,
+    String? playlistSortOrder,
     LayoutMode? playlistLayoutMode,
   }) {
     return SettingsState(
@@ -78,6 +86,8 @@ class SettingsState {
       downloadsLayoutMode: downloadsLayoutMode ?? this.downloadsLayoutMode,
       downloadsSortKey: downloadsSortKey ?? this.downloadsSortKey,
       downloadsSortOrder: downloadsSortOrder ?? this.downloadsSortOrder,
+      playlistSortKey: playlistSortKey ?? this.playlistSortKey,
+      playlistSortOrder: playlistSortOrder ?? this.playlistSortOrder,
       playlistLayoutMode: playlistLayoutMode ?? this.playlistLayoutMode,
     );
   }
@@ -96,6 +106,8 @@ class SettingsState {
         'downloadsLayoutMode': downloadsLayoutMode.index,
         'downloadsSortKey': downloadsSortKey,
         'downloadsSortOrder': downloadsSortOrder,
+        'playlistSortKey': playlistSortKey,
+        'playlistSortOrder': playlistSortOrder,
         'playlistLayoutMode': playlistLayoutMode.index,
       };
 
@@ -113,6 +125,8 @@ class SettingsState {
         downloadsLayoutMode: LayoutMode.values[(json['downloadsLayoutMode'] ?? 2).clamp(0, 2)],
         downloadsSortKey: json['downloadsSortKey'] ?? 'recent',
         downloadsSortOrder: json['downloadsSortOrder'] ?? 'desc',
+        playlistSortKey: json['playlistSortKey'] ?? 'recent',
+        playlistSortOrder: json['playlistSortOrder'] ?? 'desc',
         playlistLayoutMode: LayoutMode.values[(json['playlistLayoutMode'] ?? 2).clamp(0, 2)],
       );
 }
@@ -159,6 +173,8 @@ class SettingsNotifier extends Notifier<SettingsState> {
       downloadsLayoutMode: LayoutMode.values[(prefs.getInt('megit_dl_layout_mode') ?? 2).clamp(0, 2)],
       downloadsSortKey: prefs.getString('megit_dl_sort_key') ?? 'recent',
       downloadsSortOrder: prefs.getString('megit_dl_sort_order') ?? 'desc',
+      playlistSortKey: prefs.getString('megit_pl_sort_key') ?? 'recent',
+      playlistSortOrder: prefs.getString('megit_pl_sort_order') ?? 'desc',
       playlistLayoutMode: LayoutMode.values[(prefs.getInt('megit_playlist_layout') ?? 2).clamp(0, 2)],
     );
   }
@@ -167,7 +183,29 @@ class SettingsNotifier extends Notifier<SettingsState> {
     try {
       final doc = await _db.collection('users').doc(uid).collection('settings').doc('app').get();
       if (doc.exists) {
-        state = SettingsState.fromJson(doc.data()!);
+        final data = doc.data()!;
+        final cloudState = SettingsState.fromJson(data);
+        
+        // Merge cloud settings with current local state.
+        // We prioritize local values for sorting and layout if they've been loaded.
+        state = state.copyWith(
+          streamingQuality: cloudState.streamingQuality,
+          downloadQuality: cloudState.downloadQuality,
+          crossfadeDuration: cloudState.crossfadeDuration,
+          dataSaverMode: cloudState.dataSaverMode,
+          accentColor: cloudState.accentColor,
+          persistentStorage: cloudState.persistentStorage,
+          autoplayEnabled: cloudState.autoplayEnabled,
+          // Only overwrite sort/layout if cloud has them and local is still default?
+          // Actually, let's just merge all but keep it safe.
+          libraryLayoutMode: cloudState.libraryLayoutMode,
+          librarySortKey: data['librarySortKey'] ?? state.librarySortKey,
+          librarySortOrder: data['librarySortOrder'] ?? state.librarySortOrder,
+          downloadsLayoutMode: cloudState.downloadsLayoutMode,
+          downloadsSortKey: data['downloadsSortKey'] ?? state.downloadsSortKey,
+          downloadsSortOrder: data['downloadsSortOrder'] ?? state.downloadsSortOrder,
+          playlistLayoutMode: cloudState.playlistLayoutMode,
+        );
         _saveToDisk();
       } else {
         _saveToFirestore(uid);
@@ -188,6 +226,7 @@ class SettingsNotifier extends Notifier<SettingsState> {
   void setLibrarySort(String k, String o) { state = state.copyWith(librarySortKey: k, librarySortOrder: o); _save(); }
   void setDownloadsLayoutMode(LayoutMode m) { state = state.copyWith(downloadsLayoutMode: m); _save(); }
   void setDownloadsSort(String k, String o) { state = state.copyWith(downloadsSortKey: k, downloadsSortOrder: o); _save(); }
+  void setPlaylistSort(String k, String o) { state = state.copyWith(playlistSortKey: k, playlistSortOrder: o); _save(); }
   void setPlaylistLayoutMode(LayoutMode m) { state = state.copyWith(playlistLayoutMode: m); _save(); }
 
   Future<void> reset() async {
@@ -217,6 +256,8 @@ class SettingsNotifier extends Notifier<SettingsState> {
     await prefs.setInt('megit_dl_layout_mode', state.downloadsLayoutMode.index);
     await prefs.setString('megit_dl_sort_key', state.downloadsSortKey);
     await prefs.setString('megit_dl_sort_order', state.downloadsSortOrder);
+    await prefs.setString('megit_pl_sort_key', state.playlistSortKey);
+    await prefs.setString('megit_pl_sort_order', state.playlistSortOrder);
     await prefs.setInt('megit_playlist_layout', state.playlistLayoutMode.index);
   }
 
